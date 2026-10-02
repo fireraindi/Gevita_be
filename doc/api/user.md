@@ -5,6 +5,7 @@
 Semua endpoint membutuhkan header: `Authorization: Bearer <token>`
 
 ---
+
 ---
 
 ## 2. Update Profile
@@ -15,9 +16,9 @@ Memperbarui data profil pengguna (nama, posisi, dan/atau foto).
 - **Headers:** `Authorization: Bearer <token>`
 - **Content-Type:** `multipart/form-data`
 - **Request Body:**
-  - `name` *(string, opsional)*: Nama baru
-  - `position` *(string, opsional)*: Posisi/jabatan baru
-  - `photo` *(file image, opsional)*: Foto profil baru
+  - `name` _(string, opsional)_: Nama baru
+  - `position` _(string, opsional)_: Posisi/jabatan baru
+  - `photo` _(file image, opsional)_: Foto profil baru
 - **Success Response `200 OK`:**
   ```json
   {
@@ -38,5 +39,34 @@ Memperbarui data profil pengguna (nama, posisi, dan/atau foto).
   {
     "status": "error",
     "message": "Format file foto tidak valid"
+  }
+  ```
+
+## 3. Change Password
+
+Mengubah password pengguna yang sedang login.
+
+- **URL:** `POST /api/auth/change-password`
+- **Headers:** `Authorization: Bearer <token>`
+- **Content-Type:** `application/json`
+- **Request Body:**
+  ```json
+  {
+    "old_password": "password123",
+    "new_password": "newpassword456"
+  }
+  ```
+- **Success Response `200 OK`:**
+  ```json
+  {
+    "status": "success",
+    "message": "Password berhasil diubah"
+  }
+  ```
+- **Error Response `422 Unprocessable Entity`:**
+  ```json
+  {
+    "status": "error",
+    "message": "Password lama tidak sesuai"
   }
   ```

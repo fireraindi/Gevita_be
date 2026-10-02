@@ -40,60 +40,7 @@ Mendapatkan JWT token untuk otentikasi.
 
 ---
 
-## 2. Logout
-
-Mencabut (invalidate) JWT token yang aktif.
-
-- **URL:** `POST /api/auth/logout`
-- **Headers:** `Authorization: Bearer <token>`
-- **Request Body:** (Kosong)
-- **Success Response `200 OK`:**
-  ```json
-  {
-    "status": "success",
-    "message": "Logout successful"
-  }
-  ```
-- **Error Response `401 Unauthorized`:**
-  ```json
-  {
-    "status": "error",
-    "message": "Token tidak valid atau sudah kadaluarsa"
-  }
-  ```
-
----
-
-## 3. Change Password
-
-Mengubah password pengguna yang sedang login.
-
-- **URL:** `POST /api/auth/change-password`
-- **Headers:** `Authorization: Bearer <token>`
-- **Content-Type:** `application/json`
-- **Request Body:**
-  ```json
-  {
-    "old_password": "password123",
-    "new_password": "newpassword456"
-  }
-  ```
-- **Success Response `200 OK`:**
-  ```json
-  {
-    "status": "success",
-    "message": "Password berhasil diubah"
-  }
-  ```
-- **Error Response `422 Unprocessable Entity`:**
-  ```json
-  {
-    "status": "error",
-    "message": "Password lama tidak sesuai"
-  }
-  ```
-
-## 4. Get Profile
+## 2. Get Profile
 
 Mendapatkan informasi profil pengguna yang sedang login.
 

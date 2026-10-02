@@ -2,13 +2,14 @@
   "name": "backend",
   "version": "1.0.50",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "bun test",
     "dev": "bun run --watch src/index.ts",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
     "db:migrate": "drizzle-kit migrate"
   },
   "dependencies": {
+    "@elysia/openapi": "^1.4.16",
     "@elysia/static": "^1.4.11",
     "drizzle-orm": "^0.45.3",
     "elysia": "latest",
