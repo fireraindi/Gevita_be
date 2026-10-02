@@ -9,3 +9,7 @@ export class UnauthorizedError extends Error {
 export class ForbiddenError extends Error {
   readonly statusCode = 403;
 }
+
+export class NotFoundError extends Error {
+  readonly statusCode = 404;
+}

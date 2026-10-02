@@ -1,6 +1,6 @@
 import { Elysia, ParseError } from "elysia";
 import { ZodError } from "zod";
-import { ForbiddenError, UnauthorizedError } from "../errors/errors";
+import { ForbiddenError, NotFoundError, UnauthorizedError } from "../errors/errors";
 
 function getUniqueConstraintField(error: unknown, seen = new Set<unknown>()): "email" | "phone" | undefined {
   if (typeof error !== "object" || error === null || seen.has(error)) return undefined;
@@ -50,6 +50,11 @@ export const errorMiddleware = new Elysia({ name: "error-middleware" }).onError(
   if (error instanceof ForbiddenError) {
     set.status = 403;
     return { status: "error", statusCode: 403, errors: error.message };
+  }
+
+  if (error instanceof NotFoundError) {
+    set.status = 404;
+    return { status: "error", statusCode: 404, errors: error.message };
   }
 
    // Database errors may be wrapped by Drizzle; classify them before validation errors.
