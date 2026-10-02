@@ -2,6 +2,7 @@ import { and, eq, isNull, or } from "drizzle-orm";
 import { db } from "../../db";
 import { ForbiddenError, NotFoundError, UnauthorizedError } from "../../errors/errors";
 import { generateToken } from "../../helpers/token";
+import { getProfilePhotoUrl } from "../../helpers/photo";
 import { validate } from "../../helpers/validate";
 import { users } from "../user/schema";
 import type { LoginRequest } from "./model";
@@ -47,5 +48,5 @@ export async function getCurrentUser(id: string) {
   if (!user) throw new NotFoundError("User not found");
   if (!user.is_active) throw new ForbiddenError("User account is inactive");
 
-  return user;
+  return { ...user, photo: getProfilePhotoUrl(user.photo) };
 }

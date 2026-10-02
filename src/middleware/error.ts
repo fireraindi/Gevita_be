@@ -1,4 +1,4 @@
-import { Elysia, ParseError } from "elysia";
+import { Elysia, NotFoundError as ElysiaNotFoundError, ParseError } from "elysia";
 import { ZodError } from "zod";
 import { ForbiddenError, NotFoundError, UnauthorizedError } from "../errors/errors";
 
@@ -55,6 +55,11 @@ export const errorMiddleware = new Elysia({ name: "error-middleware" }).onError(
   if (error instanceof NotFoundError) {
     set.status = 404;
     return { status: "error", statusCode: 404, errors: error.message };
+  }
+
+  if (error instanceof ElysiaNotFoundError) {
+    set.status = 404;
+    return { status: "error", statusCode: 404, errors: "Not found" };
   }
 
    // Database errors may be wrapped by Drizzle; classify them before validation errors.
