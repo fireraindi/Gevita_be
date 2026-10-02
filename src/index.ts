@@ -2,10 +2,12 @@ import { Elysia } from "elysia";
 
 import { errorMiddleware } from "./middleware/error";
 import { userController } from "./features/user/controller";
+import { authController } from "./features/auth/controller";
 
 const app = new Elysia()
   .use(errorMiddleware)
   .use(userController)
+  .use(authController)
   .get("/", () => "Hello Elysia")
   .listen(3000);
 

@@ -1,5 +1,6 @@
 import { Elysia, ParseError } from "elysia";
 import { ZodError } from "zod";
+import { ForbiddenError, UnauthorizedError } from "../errors/errors";
 
 function getUniqueConstraintField(error: unknown, seen = new Set<unknown>()): "email" | "phone" | undefined {
   if (typeof error !== "object" || error === null || seen.has(error)) return undefined;
@@ -39,6 +40,16 @@ export const errorMiddleware = new Elysia({ name: "error-middleware" }).onError(
       message: error.message,
       errors: { body: ["Invalid JSON request body"] },
     };
+  }
+
+  if (error instanceof UnauthorizedError) {
+    set.status = 401;
+    return { status: "error", statusCode: 401, errors: error.message };
+  }
+
+  if (error instanceof ForbiddenError) {
+    set.status = 403;
+    return { status: "error", statusCode: 403, errors: error.message };
   }
 
    // Database errors may be wrapped by Drizzle; classify them before validation errors.

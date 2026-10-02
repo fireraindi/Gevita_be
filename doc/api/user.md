@@ -5,36 +5,6 @@
 Semua endpoint membutuhkan header: `Authorization: Bearer <token>`
 
 ---
-
-## 1. Get Profile
-
-Mendapatkan informasi profil pengguna yang sedang login.
-
-- **URL:** `GET /api/user/profile`
-- **Headers:** `Authorization: Bearer <token>`
-- **Success Response `200 OK`:**
-  ```json
-  {
-    "status": "success",
-    "data": {
-      "id": 1,
-      "name": "Budi Santoso",
-      "email": "budi@example.com",
-      "position": "Software Engineer",
-      "photo": "https://example.com/photos/budi.jpg",
-      "role": "employee",
-      "is_active": true
-    }
-  }
-  ```
-- **Error Response `401 Unauthorized`:**
-  ```json
-  {
-    "status": "error",
-    "message": "Token tidak valid atau sudah kadaluarsa"
-  }
-  ```
-
 ---
 
 ## 2. Update Profile

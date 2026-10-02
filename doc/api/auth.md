@@ -16,7 +16,7 @@ Mendapatkan JWT token untuk otentikasi.
 - **Request Body:**
   ```json
   {
-    "email": "budi@example.com",
+    "identifier": "budi@example.com",
     "password": "password123"
   }
   ```
@@ -26,15 +26,7 @@ Mendapatkan JWT token untuk otentikasi.
     "status": "success",
     "message": "Login successful",
     "data": {
-      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-      "user": {
-        "id": 1,
-        "name": "Budi Santoso",
-        "email": "budi@example.com",
-        "position": "Software Engineer",
-        "photo": "https://example.com/photos/budi.jpg",
-        "role": "employee"
-      }
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
     }
   }
   ```
@@ -98,5 +90,34 @@ Mengubah password pengguna yang sedang login.
   {
     "status": "error",
     "message": "Password lama tidak sesuai"
+  }
+  ```
+
+## 4. Get Profile
+
+Mendapatkan informasi profil pengguna yang sedang login.
+
+- **URL:** `GET /api/auth/me`
+- **Headers:** `Authorization: Bearer <token>`
+- **Success Response `200 OK`:**
+  ```json
+  {
+    "status": "success",
+    "data": {
+      "id": 1,
+      "name": "Budi Santoso",
+      "email": "budi@example.com",
+      "position": "Software Engineer",
+      "photo": "https://example.com/photos/budi.jpg",
+      "role": "employee",
+      "is_active": true
+    }
+  }
+  ```
+- **Error Response `401 Unauthorized`:**
+  ```json
+  {
+    "status": "error",
+    "message": "Token tidak valid atau sudah kadaluarsa"
   }
   ```

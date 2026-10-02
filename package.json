@@ -11,10 +11,12 @@
   "dependencies": {
     "drizzle-orm": "^0.45.3",
     "elysia": "latest",
+    "jsonwebtoken": "^9.0.3",
     "postgres": "^3.4.9",
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.10",
     "bun-types": "latest",
     "drizzle-kit": "^0.31.11",
     "tsx": "^4.23.15"
