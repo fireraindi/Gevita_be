@@ -17,4 +17,10 @@ export const createUserSchema = z.object({
   photo: photoSchema,
 });
 
+export const changePasswordSchema = z.object({
+  oldPassword: z.string().min(4).max(100),
+  newPassword: z.string().min(4).max(100),
+});
+
 export type CreateUserInput = z.infer<typeof createUserSchema>;
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;

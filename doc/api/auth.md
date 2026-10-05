@@ -31,10 +31,26 @@ Mendapatkan JWT token untuk otentikasi.
   }
   ```
 - **Error Response `401 Unauthorized`:**
+
   ```json
   {
     "status": "error",
-    "message": "Email atau password salah"
+    "errors": "Invalid credentials"
+  }
+  ```
+
+- **Error Response `403 Forbidden`:**
+  ```json
+  {
+    "status": "error",
+    "errors": "Account is not active"
+  }
+  ```
+- **Error Response `500 Internal Server Error`:**
+  ```json
+  {
+    "status": "error",
+    "errors": "Internal server error"
   }
   ```
 
@@ -61,10 +77,38 @@ Mendapatkan informasi profil pengguna yang sedang login.
     }
   }
   ```
+- **Error Response `400 Bad Request`:**
+  ```json
+  {
+    "status": "error",
+    "errors": Zod error message
+  }
+  ```
 - **Error Response `401 Unauthorized`:**
   ```json
   {
     "status": "error",
-    "message": "Token tidak valid atau sudah kadaluarsa"
+    "errors": "Unauthorized"
+  }
+  ```
+- **Error Response `403 Forbidden`:**
+  ```json
+  {
+    "status": "error",
+    "errors": "Account is not active"
+  }
+  ```
+- **Error Response `404 Not Found`:**
+  ```json
+  {
+    "status": "error",
+    "errors": "User not found"
+  }
+  ```
+- **Error Response `500 Internal Server Error`:**
+  ```json
+  {
+    "status": "error",
+    "errors": "Internal server error"
   }
   ```

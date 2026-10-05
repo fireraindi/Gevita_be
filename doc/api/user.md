@@ -46,7 +46,7 @@ Memperbarui data profil pengguna (nama, posisi, dan/atau foto).
 
 Mengubah password pengguna yang sedang login.
 
-- **URL:** `POST /api/auth/change-password`
+- **URL:** `PUT /api/auth/change-password`
 - **Headers:** `Authorization: Bearer <token>`
 - **Content-Type:** `application/json`
 - **Request Body:**
@@ -60,13 +60,34 @@ Mengubah password pengguna yang sedang login.
   ```json
   {
     "status": "success",
-    "message": "Password berhasil diubah"
+    "message": "Update password successful"
+  }
+  ```
+- **Success Response `400 Bad Request`:**
+  ```json
+  {
+    "status": "success",
+    "message": zod error message
+  }
+  ```
+- **Success Response `401 Unauthorized`:**
+  ```json
+  {
+    "status": "success",
+    "message": "Unauthorized"
   }
   ```
 - **Error Response `422 Unprocessable Entity`:**
   ```json
   {
     "status": "error",
-    "message": "Password lama tidak sesuai"
+    "message": "Password does not match"
+  }
+  ```
+- **Error Response `500 Internal Server Error`:**
+  ```json
+  {
+    "status": "error",
+    "errors": "Internal server error"
   }
   ```

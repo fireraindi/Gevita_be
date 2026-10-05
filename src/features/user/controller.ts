@@ -1,7 +1,9 @@
 import { Elysia, t } from "elysia";
-import { createUser } from "./service";
+import { changePassword, createUser } from "./service";
 import type { RegisterRequest } from "./model/registerRequest";
 import type { RegisterUserResponse } from "./model/userResponse";
+import { authMiddleware } from "../../middleware/auth";
+import type { ChangePasswordInput } from "./validation";
 
 export const userController = new Elysia({ prefix: "/api/users" }).post(
   "",
@@ -75,3 +77,34 @@ export const userController = new Elysia({ prefix: "/api/users" }).post(
     },
   },
 );
+
+export const protectedUserController = new Elysia({ prefix: "/api/users" })
+  .use(authMiddleware)
+  .put("", async ({ body, authUser }) => {
+    await changePassword(authUser.id, body as ChangePasswordInput);
+    return { status: "success" as const, statusCode: 200 as const, message: "Success update password user" };
+  }, {
+    response: {
+      200: t.Object({ status: t.Literal("success"), statusCode: t.Literal(200), message: t.String() }),
+      400: t.Object({ status: t.Literal("error"), statusCode: t.Literal(400), errors: t.Unknown() }),
+      401: t.Object({ status: t.Literal("error"), statusCode: t.Literal(401), errors: t.String() }),
+      // 422: t.Object({ status: t.Literal("error"), statusCode: t.Literal(422), errors: t.String() }),
+    },
+    detail: {
+      tags: ["Auth"],
+      summary: "Change password",
+      description: "Mengubah password pengguna yang sedang login.",
+      security: [{ bearerAuth: [] }],
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: {
+          type: "object",
+          required: ["oldPassword", "newPassword"],
+          properties: {
+            oldPassword: { type: "string", minLength: 4, maxLength: 100 },
+            newPassword: { type: "string", minLength: 4, maxLength: 100 },
+          },
+        } } },
+      },
+    },
+  });

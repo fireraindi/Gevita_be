@@ -3,7 +3,7 @@ import { staticPlugin } from "@elysia/static";
 import { openapi } from "@elysia/openapi";
 
 import { errorMiddleware } from "./middleware/error";
-import { userController } from "./features/user/controller";
+import { protectedUserController, userController } from "./features/user/controller";
 import { authController } from "./features/auth/controller";
 
 const app = new Elysia()
@@ -35,6 +35,7 @@ const app = new Elysia()
   .use(await staticPlugin({ assets: "uploads", prefix: "/uploads" }))
   .use(errorMiddleware)
   .use(userController)
+  .use(protectedUserController)
   .use(authController)
   .get("/", () => "Hello Elysia", {
     detail: {

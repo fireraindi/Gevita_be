@@ -1,6 +1,6 @@
 import { Elysia, NotFoundError as ElysiaNotFoundError, ParseError } from "elysia";
 import { ZodError } from "zod";
-import { ForbiddenError, NotFoundError, UnauthorizedError } from "../errors/errors";
+import { BadRequestError, ForbiddenError, NotFoundError, PasswordMismatchError, UnauthorizedError } from "../errors/errors";
 
 function getUniqueConstraintField(error: unknown, seen = new Set<unknown>()): "email" | "phone" | undefined {
   if (typeof error !== "object" || error === null || seen.has(error)) return undefined;
@@ -41,10 +41,20 @@ export const errorMiddleware = new Elysia({ name: "error-middleware" }).onError(
       errors: { body: ["Invalid JSON request body"] },
     };
   }
+  if (error instanceof BadRequestError) {
+    set.status = 400;
+      return { status: "error", statusCode: 400, errors: error.message };
+  }
+
 
   if (error instanceof UnauthorizedError) {
     set.status = 401;
     return { status: "error", statusCode: 401, errors: error.message };
+  }
+
+  if (error instanceof PasswordMismatchError) {
+    set.status = 422;
+    return { status: "error", statusCode: 422, errors: error.message };
   }
 
   if (error instanceof ForbiddenError) {

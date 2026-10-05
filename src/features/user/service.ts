@@ -1,11 +1,14 @@
+import { and, eq, isNull } from "drizzle-orm";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { db } from "../../db";
 import { users } from "./schema";
-import { createUserSchema } from "./validation";
+import { changePasswordSchema, createUserSchema } from "./validation";
 import type { UserResponse } from "./model/userResponse";
 import { RegisterRequest } from "./model/registerRequest";
 import { validate } from "../../helpers/validate";
+import { BadRequestError, NotFoundError, PasswordMismatchError } from "../../errors/errors";
+import type { ChangePasswordInput } from "./validation";
 
 const extensionByType: Record<string, string> = {
   "image/jpeg": "jpg",
@@ -47,4 +50,20 @@ export async function createUser(request: RegisterRequest): Promise<UserResponse
     createdAt: users.created_at,
   });
   return user;
+}
+
+export async function changePassword(userId: string, request: ChangePasswordInput): Promise<void> {
+  const input = validate(changePasswordSchema, request);
+  const [user] = await db.select({ id: users.id, password: users.password })
+    .from(users)
+    .where(and(eq(users.id, userId), isNull(users.deleted_at)))
+    .limit(1);
+
+  if (!user) throw new NotFoundError("User not found");
+  if (!(await Bun.password.verify(input.oldPassword, user.password))) {
+    throw new BadRequestError("Password doesnt match");
+  }
+
+  const password = await Bun.password.hash(input.newPassword);
+  await db.update(users).set({ password, updated_at: new Date() }).where(eq(users.id, userId));
 }
