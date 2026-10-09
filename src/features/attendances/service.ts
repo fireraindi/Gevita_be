@@ -67,7 +67,8 @@ export async function insertAttendance(values: {
     status: attendances.status,
     checkInPhoto: attendances.check_in_photo,
   });
-  return attendance;
+  if (!attendance) throw new Error("Attendance insert returned no row");
+  return { ...attendance, status: values.status };
 }
 
 function isAttendanceUniqueViolation(error: unknown, seen = new Set<unknown>()): boolean {
@@ -155,6 +156,9 @@ export async function checkOut(userId: string): Promise<CheckOutAttendanceData> 
   if (!updatedAttendance) {
     throw new ConflictError("Already checked out today");
   }
+  if (!updatedAttendance.checkOutTime) {
+    throw new Error("Attendance update returned no check-out time");
+  }
 
-  return updatedAttendance;
+  return { ...updatedAttendance, checkOutTime: updatedAttendance.checkOutTime };
 }
