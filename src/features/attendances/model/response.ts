@@ -15,3 +15,17 @@ export interface CheckInResponse {
   message: "Success check in attendances";
   data: CheckInAttendanceData;
 }
+
+export interface CheckOutAttendanceData {
+  id: number;
+  userId: string;
+  date: string;
+  checkOutTime: Date;
+}
+
+export interface CheckOutResponse {
+  status: "success";
+  statusCode: 200;
+  message: "Success check out attendances";
+  data: CheckOutAttendanceData;
+}

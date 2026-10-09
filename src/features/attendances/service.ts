@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { db } from "../../db";
@@ -6,7 +6,7 @@ import { attendances } from "../../db/schema";
 import { ConflictError } from "../../errors/errors";
 import { validate } from "../../helpers/validate";
 import type { CheckInRequest } from "./model/request";
-import type { CheckInAttendanceData } from "./model/response";
+import type { CheckInAttendanceData, CheckOutAttendanceData } from "./model/response";
 import { checkInSchema } from "./validation";
 
 const attendanceTimeZone = "Asia/Jakarta";
@@ -126,4 +126,35 @@ export async function checkIn(userId: string, request: CheckInRequest): Promise<
     }
     throw error;
   }
+}
+
+export async function checkOut(userId: string): Promise<CheckOutAttendanceData> {
+  const now = new Date();
+  const date = getCurrentDate(now);
+  const attendance = await findAttendanceByUserIdAndDate(userId, date);
+
+  if (!attendance) {
+    throw new ConflictError("Check in is required");
+  }
+
+  const [updatedAttendance] = await db.update(attendances)
+    .set({ check_out_time: now })
+    .where(and(
+      eq(attendances.id, attendance.id),
+      eq(attendances.user_id, userId),
+      eq(attendances.date, date),
+      isNull(attendances.check_out_time),
+    ))
+    .returning({
+      id: attendances.id,
+      userId: attendances.user_id,
+      date: attendances.date,
+      checkOutTime: attendances.check_out_time,
+    });
+
+  if (!updatedAttendance) {
+    throw new ConflictError("Already checked out today");
+  }
+
+  return updatedAttendance;
 }

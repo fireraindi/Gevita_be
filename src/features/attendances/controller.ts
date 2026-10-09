@@ -1,8 +1,8 @@
 import { Elysia, t } from "elysia";
 import { authMiddleware } from "../../middleware/auth";
-import { checkIn } from "./service";
+import { checkIn, checkOut } from "./service";
 import type { CheckInRequest } from "./model/request";
-import type { CheckInResponse } from "./model/response";
+import type { CheckInResponse, CheckOutResponse } from "./model/response";
 
 export const attendancesController = new Elysia({ prefix: "/api/attendances" })
   .use(authMiddleware)
@@ -49,5 +49,33 @@ export const attendancesController = new Elysia({ prefix: "/api/attendances" })
           },
         } } },
       },
+    },
+  })
+  .put("", async ({ authUser }): Promise<CheckOutResponse> => ({
+    status: "success",
+    statusCode: 200,
+    message: "Success check out attendances",
+    data: await checkOut(authUser.id),
+  }), {
+    response: {
+      200: t.Object({
+        status: t.Literal("success"),
+        statusCode: t.Literal(200),
+        message: t.String(),
+        data: t.Object({
+          id: t.Number(),
+          userId: t.String(),
+          date: t.String(),
+          checkOutTime: t.Date(),
+        }),
+      }),
+      401: t.Object({ status: t.Literal("error"), statusCode: t.Literal(401), errors: t.String() }),
+      409: t.Object({ status: t.Literal("error"), statusCode: t.Literal(409), errors: t.String() }),
+    },
+    detail: {
+      tags: ["Attendances"],
+      summary: "Check out",
+      description: "Melakukan check out absensi harian.",
+      security: [{ bearerAuth: [] }],
     },
   });
