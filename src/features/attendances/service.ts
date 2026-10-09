@@ -5,8 +5,9 @@ import { db } from "../../db";
 import { attendances } from "../../db/schema";
 import { ConflictError } from "../../errors/errors";
 import { validate } from "../../helpers/validate";
+import { getCheckInPhotoUrl } from "../../helpers/photo";
 import type { CheckInRequest } from "./model/request";
-import type { CheckInAttendanceData, CheckOutAttendanceData } from "./model/response";
+import type { CheckInAttendanceData, CheckOutAttendanceData, TodayAttendanceData } from "./model/response";
 import { checkInSchema } from "./validation";
 
 const attendanceTimeZone = "Asia/Jakarta";
@@ -161,4 +162,28 @@ export async function checkOut(userId: string): Promise<CheckOutAttendanceData> 
   }
 
   return { ...updatedAttendance, checkOutTime: updatedAttendance.checkOutTime };
+}
+
+export async function getTodayAttendance(userId: string): Promise<TodayAttendanceData | null> {
+  const today = getCurrentDate(new Date());
+  const [attendance] = await db.select({
+    id: attendances.id,
+    check_in_time: attendances.check_in_time,
+    check_in_photo: attendances.check_in_photo,
+    check_out_time: attendances.check_out_time,
+    status: attendances.status,
+  })
+    .from(attendances)
+    .where(and(eq(attendances.user_id, userId), eq(attendances.date, today)))
+    .limit(1);
+
+  if (!attendance) return null;
+
+  const checkInPhoto = getCheckInPhotoUrl(attendance.check_in_photo);
+  if (!checkInPhoto) throw new Error("Attendance check-in photo is missing");
+
+  return {
+    ...attendance,
+    check_in_photo: checkInPhoto,
+  };
 }

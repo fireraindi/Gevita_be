@@ -1,6 +1,6 @@
 import { Elysia, t } from "elysia";
 import { authMiddleware } from "../../middleware/auth";
-import { checkIn, checkOut } from "./service";
+import { checkIn, checkOut, getTodayAttendance } from "./service";
 import type { CheckInRequest } from "./model/request";
 import type { CheckInResponse, CheckOutResponse } from "./model/response";
 
@@ -49,6 +49,32 @@ export const attendancesController = new Elysia({ prefix: "/api/attendances" })
           },
         } } },
       },
+    },
+  })
+  .get("/today", async ({ authUser }) => ({
+    status: "success" as const,
+    statusCode: 200 as const,
+    data: await getTodayAttendance(authUser.id),
+  }), {
+    response: {
+      200: t.Object({
+        status: t.Literal("success"),
+        statusCode: t.Literal(200),
+        data: t.Nullable(t.Object({
+          id: t.Number(),
+          check_in_time: t.Date(),
+          check_in_photo: t.String(),
+          check_out_time: t.Nullable(t.Date()),
+          status: t.String(),
+        })),
+      }),
+      401: t.Object({ status: t.Literal("error"), statusCode: t.Literal(401), errors: t.String() }),
+    },
+    detail: {
+      tags: ["Attendances"],
+      summary: "Get today attendance",
+      description: "Mengambil status data absensi pengguna yang sedang login untuk hari ini. Mengembalikan data null jika belum melakukan check-in.",
+      security: [{ bearerAuth: [] }],
     },
   })
   .put("", async ({ authUser }): Promise<CheckOutResponse> => ({

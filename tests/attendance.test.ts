@@ -130,4 +130,44 @@ describe("Attendance API", () => {
     expect(second.response.status).toBe(409);
     expect(second.body.errors).toBe("Already checked out today");
   });
+
+  describe("Get today's attendance", () => {
+    test("rejects a request without a token", async () => {
+      const { response, body } = await requestJson("/api/attendances/today", "GET");
+      expect(response.status).toBe(401);
+      expect(body.errors).toBe("Unauthorized");
+    });
+
+    test("returns null when the user has not checked in today", async () => {
+      const { token } = await createUserAndLogin(namespace);
+      const { response, body } = await requestJson("/api/attendances/today", "GET", undefined, token);
+      expect(response.status).toBe(200);
+      expect(body).toEqual({ status: "success", statusCode: 200, data: null });
+    });
+
+    test("returns today's check-in with a public photo URL and null check-out", async () => {
+      const { token } = await createUserAndLogin(namespace);
+      const checkIn = await checkInAndTrackPhoto(token);
+      const { response, body } = await requestJson("/api/attendances/today", "GET", undefined, token);
+      const baseUrl = (process.env.PUBLIC_BASE_URL ?? "http://localhost:3000").replace(/\/+$/, "");
+
+      expect(response.status).toBe(200);
+      expect(body.data.id).toBe(checkIn.body.data.id);
+      expect(body.data.check_in_photo).toBe(`${baseUrl}/uploads/checkin/${checkIn.body.data.checkInPhoto}`);
+      expect(body.data.check_out_time).toBeNull();
+      expect(body.data.status).toBe(checkIn.body.data.status);
+    });
+
+    test("returns a check-out timestamp after check-out", async () => {
+      const { token } = await createUserAndLogin(namespace);
+      await checkInAndTrackPhoto(token);
+      const checkOut = await requestJson("/api/attendances", "PUT", undefined, token);
+      const today = await requestJson("/api/attendances/today", "GET", undefined, token);
+
+      expect(checkOut.response.status).toBe(200);
+      expect(today.response.status).toBe(200);
+      expect(new Date(today.body.data.check_out_time).getTime())
+        .toBe(new Date(checkOut.body.data.checkOutTime).getTime());
+    });
+  });
 });

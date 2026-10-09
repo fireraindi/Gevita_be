@@ -29,3 +29,17 @@ export interface CheckOutResponse {
   message: "Success check out attendances";
   data: CheckOutAttendanceData;
 }
+
+export interface TodayAttendanceData {
+  id: number;
+  check_in_time: Date;
+  check_in_photo: string;
+  check_out_time: Date | null;
+  status: string;
+}
+
+export interface TodayAttendanceResponse {
+  status: "success";
+  statusCode: 200;
+  data: TodayAttendanceData | null;
+}

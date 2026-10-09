@@ -79,10 +79,11 @@ Mengecek status absensi karyawan pada hari ini (berguna untuk kondisional tampil
   ```json
   {
     "status": "success",
+    "statusCode": 200,
     "data": {
       "id": 1,
       "check_in_time": "2023-10-25T08:00:00Z",
-      "check_in_photo": "https://example.com/attendances/checkin-budi.jpg",
+      "check_in_photo": "http://localhost:3000/uploads/checkin/1760000000000.jpg",
       "check_out_time": null,
       "status": "Hadir"
     }
@@ -92,7 +93,16 @@ Mengecek status absensi karyawan pada hari ini (berguna untuk kondisional tampil
   ```json
   {
     "status": "success",
+    "statusCode": 200,
     "data": null
+  }
+  ```
+- **Error Response `401 Unauthorized`:**
+  ```json
+  {
+    "status": "error",
+    "statusCode": 401,
+    "errors": "Unauthorized"
   }
   ```
 
