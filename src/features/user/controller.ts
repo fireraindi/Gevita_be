@@ -37,7 +37,7 @@ export const userController = new Elysia({ prefix: "/api/users" }).post(
       409: t.Object({ status: t.Literal("error"), statusCode: t.Literal(409), errors: t.Unknown() }),
     },
     detail: {
-      tags: ["Auth"],
+      tags: ["Users"],
       summary: "Register user",
       description: "Mendaftarkan pengguna baru. Foto profil bersifat opsional.",
       requestBody: {
@@ -91,7 +91,7 @@ export const protectedUserController = new Elysia({ prefix: "/api/users" })
       // 422: t.Object({ status: t.Literal("error"), statusCode: t.Literal(422), errors: t.String() }),
     },
     detail: {
-      tags: ["Auth"],
+      tags: ["Users"],
       summary: "Change password",
       description: "Mengubah password pengguna yang sedang login.",
       security: [{ bearerAuth: [] }],

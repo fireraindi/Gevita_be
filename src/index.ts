@@ -9,7 +9,7 @@ import { attendancesController } from "./features/attendances/controller";
 
 const app = new Elysia()
   .use(openapi({
-    path: "/swagger",
+    path: "/api-docs",
     provider: "swagger-ui",
     exclude: { paths: ["/uploads", "/uploads/*"] },
     documentation: {
@@ -19,7 +19,8 @@ const app = new Elysia()
         description: "Dokumentasi interaktif API Gevita.",
       },
       tags: [
-        { name: "Auth", description: "Registrasi, login, dan profil pengguna." },
+        { name: "Auth", description: "Login dan pengambilan profil pengguna terautentikasi." },
+        { name: "Users", description: "Registrasi pengguna dan pengelolaan password." },
         { name: "General", description: "Endpoint umum aplikasi." },
         { name: "Attendances", description: "Pencatatan absensi." },
       ],
