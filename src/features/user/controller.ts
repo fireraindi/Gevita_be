@@ -1,7 +1,7 @@
 import { Elysia, t } from "elysia";
 import { changePassword, createUser } from "./service";
-import type { RegisterRequest } from "./model/registerRequest";
-import type { RegisterUserResponse } from "./model/userResponse";
+import type { RegisterRequest } from "./model/request";
+import type { RegisterUserResponse } from "./model/response";
 import { authMiddleware } from "../../middleware/auth";
 import type { ChangePasswordInput } from "./validation";
 

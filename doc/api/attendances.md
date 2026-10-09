@@ -14,7 +14,7 @@ Melakukan absensi masuk. Membutuhkan foto sebagai bukti.
 - **Headers:** `Authorization: Bearer <token>`
 - **Content-Type:** `multipart/form-data`
 - **Request Body:**
-  - `photo` *(file image, wajib)*: Foto selfie check-in
+  - `photo` _(file image, wajib)_: Foto selfie check-in
 - **Success Response `200 OK`:**
   ```json
   {
@@ -22,6 +22,7 @@ Melakukan absensi masuk. Membutuhkan foto sebagai bukti.
     "message": "Check-in berhasil",
     "data": {
       "id": 1,
+      "date": "2023-10-25",
       "check_in_time": "2023-10-25T08:00:00Z",
       "check_in_photo": "https://example.com/attendances/checkin-budi.jpg",
       "status": "Hadir"
@@ -104,8 +105,8 @@ Mendapatkan riwayat absensi karyawan.
 - **URL:** `GET /api/attendances/history`
 - **Headers:** `Authorization: Bearer <token>`
 - **Query Params:**
-  - `month` *(integer, opsional)*: Filter bulan (1-12)
-  - `year` *(integer, opsional)*: Filter tahun (contoh: 2023)
+  - `month` _(integer, opsional)_: Filter bulan (1-12)
+  - `year` _(integer, opsional)_: Filter tahun (contoh: 2023)
 - **Success Response `200 OK`:**
   ```json
   {

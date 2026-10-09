@@ -5,6 +5,7 @@ import { openapi } from "@elysia/openapi";
 import { errorMiddleware } from "./middleware/error";
 import { protectedUserController, userController } from "./features/user/controller";
 import { authController } from "./features/auth/controller";
+import { attendancesController } from "./features/attendances/controller";
 
 const app = new Elysia()
   .use(openapi({
@@ -20,6 +21,7 @@ const app = new Elysia()
       tags: [
         { name: "Auth", description: "Registrasi, login, dan profil pengguna." },
         { name: "General", description: "Endpoint umum aplikasi." },
+        { name: "Attendances", description: "Pencatatan absensi." },
       ],
       components: {
         securitySchemes: {
@@ -37,6 +39,7 @@ const app = new Elysia()
   .use(userController)
   .use(protectedUserController)
   .use(authController)
+  .use(attendancesController)
   .get("/", () => "Hello Elysia", {
     detail: {
       tags: ["General"],

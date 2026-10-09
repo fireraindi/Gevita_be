@@ -46,7 +46,7 @@ const [
   import("../src/features/user/controller"),
   import("../src/features/auth/controller"),
   import("../src/middleware/error"),
-  import("../src/features/user/schema"),
+  import("../src/db/schema"),
   import("jsonwebtoken"),
   import("../src/helpers/token"),
 ]);

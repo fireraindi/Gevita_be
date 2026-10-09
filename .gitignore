@@ -47,3 +47,5 @@ prompts
 issues
 
 uploads/profile/*
+uploads/checkin/*
+!uploads/checkin/.gitkeep

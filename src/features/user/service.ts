@@ -1,11 +1,11 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { db } from "../../db";
-import { users } from "./schema";
+import { users } from "../../db/schema";
 import { changePasswordSchema, createUserSchema } from "./validation";
-import type { UserResponse } from "./model/userResponse";
-import { RegisterRequest } from "./model/registerRequest";
+import type { UserResponse } from "./model/response";
+import { RegisterRequest } from "./model/request";
 import { validate } from "../../helpers/validate";
 import { BadRequestError, NotFoundError, PasswordMismatchError } from "../../errors/errors";
 import type { ChangePasswordInput } from "./validation";
@@ -56,7 +56,7 @@ export async function changePassword(userId: string, request: ChangePasswordInpu
   const input = validate(changePasswordSchema, request);
   const [user] = await db.select({ id: users.id, password: users.password })
     .from(users)
-    .where(and(eq(users.id, userId), isNull(users.deleted_at)))
+    .where(and(eq(users.id, userId), eq(users.is_active, true)))
     .limit(1);
 
   if (!user) throw new NotFoundError("User not found");
