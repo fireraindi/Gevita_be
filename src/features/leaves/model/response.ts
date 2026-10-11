@@ -16,6 +16,11 @@ export interface CreateLeaveSuccessResponse {
   data: LeaveResponseData;
 }
 
+export interface LeaveHistoryResponse {
+  status: "success";
+  data: LeaveResponseData[];
+}
+
 export type ValidationErrorDetails = Record<string, string[]>;
 
 export interface BadRequestErrorResponse {

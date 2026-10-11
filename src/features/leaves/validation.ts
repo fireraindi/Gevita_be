@@ -12,6 +12,7 @@ export function isValidCalendarDate(value: string): boolean {
 }
 
 const dateSchema = z.string().refine(isValidCalendarDate, "Date must be a valid date in YYYY-MM-DD format");
+const monthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Date must be a valid month in YYYY-MM format");
 const optionalImageSchema = z.union([
   z.instanceof(File)
     .refine((file) => file.size <= 1024 * 1024, "Image must not exceed 1 MB")
@@ -31,3 +32,10 @@ export const createLeaveSchema = z.object({
   message: "End date must be greater than or equal to start date",
   path: ["endDate"],
 }) satisfies z.ZodType<CreateLeaveRequest>;
+
+export const leaveHistoryQuerySchema = z.object({
+  status: z.enum(["Pending", "Approved", "Rejected"]).optional(),
+  date: z.union([monthSchema, z.literal("")]).optional(),
+});
+
+export type LeaveHistoryQuery = z.infer<typeof leaveHistoryQuerySchema>;

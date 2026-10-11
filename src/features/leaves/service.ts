@@ -1,9 +1,12 @@
+import { and, desc, eq, gte, isNull, lt } from "drizzle-orm";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { db } from "../../db";
 import { leaves } from "../../db/schema";
+import { getLeavePhotoUrl } from "../../helpers/photo";
 import { validate } from "../../helpers/validate";
-import { createLeaveSchema } from "./validation";
+import { createLeaveSchema, leaveHistoryQuerySchema } from "./validation";
+import type { LeaveHistoryQuery } from "./validation";
 import type { CreateLeaveRequest } from "./model/request";
 import type { LeaveResponseData } from "./model/response";
 
@@ -82,4 +85,42 @@ export async function createLeave(userId: string, request: CreateLeaveRequest): 
     if (storedImage) await unlink(storedImage.filepath).catch(() => undefined);
     throw error;
   }
+}
+
+function getCurrentJakartaMonth(now: Date): { startDate: string; endDate: string } {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Jakarta", year: "numeric", month: "2-digit",
+  }).formatToParts(now);
+  const year = parts.find((part) => part.type === "year")?.value ?? "";
+  const month = parts.find((part) => part.type === "month")?.value ?? "";
+  const endDate = new Date(Date.UTC(Number(year), Number(month), 1)).toISOString().slice(0, 10);
+  return { startDate: `${year}-${month}-01`, endDate };
+}
+
+export async function getLeaveHistory(userId: string, query: LeaveHistoryQuery): Promise<LeaveResponseData[]> {
+  const input = validate(leaveHistoryQuerySchema, query);
+  const conditions = [eq(leaves.user_id, userId), isNull(leaves.deleted_at)];
+  if (input.status) conditions.push(eq(leaves.status, input.status));
+
+  const month = input.date ? {
+    startDate: `${input.date}-01`,
+    endDate: (() => {
+      const [year, monthNumber] = input.date!.split("-").map(Number);
+      return new Date(Date.UTC(year!, monthNumber!, 1)).toISOString().slice(0, 10);
+    })(),
+  } : getCurrentJakartaMonth(new Date());
+  conditions.push(gte(leaves.start_date, month.startDate), lt(leaves.start_date, month.endDate));
+
+  const rows = await db.select().from(leaves)
+    .where(and(...conditions))
+    .orderBy(desc(leaves.created_at));
+  return rows.map((row) => ({
+    id: row.id,
+    startDate: row.start_date,
+    endDate: row.end_date,
+    reason: row.reason,
+    status: row.status,
+    image: getLeavePhotoUrl(row.image),
+    created_at: row.created_at.toISOString(),
+  }));
 }
