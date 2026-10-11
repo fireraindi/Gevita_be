@@ -3,11 +3,11 @@ import { join } from "node:path";
 import {
   createUserAndLogin,
   eq,
+  testDb,
+  testAttendances,
   isolateApiNamespace,
   requestForm,
   requestJson,
-  testAttendances,
-  testDb,
   trackTestUpload,
   verifyToken,
 } from "./helpers/apiTestHelpers";
@@ -34,6 +34,19 @@ describe("Attendance API", () => {
       trackTestUpload(namespace, join(process.cwd(), "uploads", "checkin", result.body.data.checkInPhoto));
     }
     return result;
+  }
+
+  async function seedAttendance(userId: string, date: string, status = "Hadir") {
+    const photo = `history-${crypto.randomUUID()}.jpg`;
+    const [attendance] = await testDb.insert(testAttendances).values({
+      user_id: userId,
+      date,
+      check_in_time: new Date(`${date}T01:02:03.000Z`),
+      check_out_time: new Date(`${date}T09:10:11.000Z`),
+      check_in_photo: photo,
+      status: status as "Hadir" | "Terlambat",
+    }).returning({ id: testAttendances.id });
+    return { ...attendance, photo };
   }
 
   test("checks in with a valid photo and stores its upload", async () => {
@@ -168,6 +181,90 @@ describe("Attendance API", () => {
       expect(today.response.status).toBe(200);
       expect(new Date(today.body.data.check_out_time).getTime())
         .toBe(new Date(checkOut.body.data.checkOutTime).getTime());
+    });
+  });
+
+  describe("Get attendance history", () => {
+    test("rejects a request without a token", async () => {
+      const { response, body } = await requestJson("/api/attendances/history", "GET");
+      expect(response.status).toBe(401);
+      expect(body.errors).toBe("Unauthorized");
+    });
+
+    test("defaults month and year to the current Jakarta month and year", async () => {
+      setSystemTime(new Date("2026-10-09T03:00:00.000Z"));
+      const { token } = await createUserAndLogin(namespace);
+      const userId = verifyToken(token).id;
+      const currentMonth = await seedAttendance(userId, "2026-10-01");
+      await seedAttendance(userId, "2026-09-30");
+      await seedAttendance(userId, "2025-10-09");
+
+      const { response, body } = await requestJson("/api/attendances/history", "GET", undefined, token);
+      expect(response.status).toBe(200);
+      expect(body.data).toHaveLength(1);
+      expect(body.data[0].id).toBe(currentMonth.id);
+    });
+
+    test("filters results by the requested month and year and formats the output", async () => {
+      const { token } = await createUserAndLogin(namespace);
+      const userId = verifyToken(token).id;
+      const requested = await seedAttendance(userId, "2026-10-25", "Terlambat");
+      await seedAttendance(userId, "2026-09-25");
+      await seedAttendance(userId, "2025-10-25");
+
+      const { response, body } = await requestJson(
+        "/api/attendances/history?month=10&year=2026",
+        "GET",
+        undefined,
+        token,
+      );
+      expect(response.status).toBe(200);
+      expect(body.data).toHaveLength(1);
+      expect(body.data[0]).toEqual({
+        id: requested.id,
+        date: "2026-10-25",
+        check_in_time: "08:02:03",
+        check_out_time: "16:10:11",
+        check_in_photo: `http://localhost:3000/uploads/checkin/${requested.photo}`,
+        status: "Terlambat",
+      });
+    });
+
+    test("returns an empty array when the selected month has no attendance", async () => {
+      const { token } = await createUserAndLogin(namespace);
+      const { response, body } = await requestJson(
+        "/api/attendances/history?month=1&year=2000",
+        "GET",
+        undefined,
+        token,
+      );
+      expect(response.status).toBe(200);
+      expect(body.data).toEqual([]);
+    });
+
+    test("rejects month values outside 1 through 12", async () => {
+      const { token } = await createUserAndLogin(namespace);
+      for (const month of ["13", "-1"]) {
+        const { response, body } = await requestJson(
+          `/api/attendances/history?month=${month}`,
+          "GET",
+          undefined,
+          token,
+        );
+        expect(response.status).toBe(400);
+        expect(body.errors.month).toContain("Month must be between 1 and 12");
+      }
+    });
+
+    test("rejects malformed and out-of-range year values", async () => {
+      const { token } = await createUserAndLogin(namespace);
+      const { response } = await requestJson(
+        "/api/attendances/history?year=not-a-year",
+        "GET",
+        undefined,
+        token,
+      );
+      expect(response.status).toBe(400);
     });
   });
 });

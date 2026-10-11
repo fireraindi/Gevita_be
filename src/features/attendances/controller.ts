@@ -1,8 +1,8 @@
 import { Elysia, t } from "elysia";
 import { authMiddleware } from "../../middleware/auth";
-import { checkIn, checkOut, getTodayAttendance } from "./service";
-import type { CheckInRequest } from "./model/request";
-import type { CheckInResponse, CheckOutResponse } from "./model/response";
+import { checkIn, checkOut, getAttendanceHistory, getTodayAttendance } from "./service";
+import type { AttendanceHistoryQueryInput, CheckInRequest } from "./model/request";
+import type { AttendanceHistoryResponse, CheckInResponse, CheckOutResponse } from "./model/response";
 
 export const attendancesController = new Elysia({ prefix: "/api/attendances" })
   .use(authMiddleware)
@@ -49,6 +49,54 @@ export const attendancesController = new Elysia({ prefix: "/api/attendances" })
           },
         } } },
       },
+    },
+  })
+  .get("/history", async ({ authUser, query }): Promise<AttendanceHistoryResponse> => ({
+    status: "success",
+    statusCode: 200,
+    data: await getAttendanceHistory(authUser.id, query as AttendanceHistoryQueryInput),
+  }), {
+    response: {
+      200: t.Object({
+        status: t.Literal("success"),
+        statusCode: t.Literal(200),
+        data: t.Array(t.Object({
+          id: t.Number(),
+          date: t.String(),
+          check_in_time: t.String(),
+          check_out_time: t.Nullable(t.String()),
+          check_in_photo: t.String(),
+          status: t.String(),
+        })),
+      }),
+      400: t.Object({
+        status: t.Literal("error"),
+        statusCode: t.Literal(400),
+        errors: t.Record(t.String(), t.Array(t.String())),
+      }),
+      401: t.Object({ status: t.Literal("error"), statusCode: t.Literal(401), errors: t.String() }),
+    },
+    detail: {
+      tags: ["Attendances"],
+      summary: "Get attendance history",
+      description: "Mengambil daftar riwayat absensi pengguna yang sedang login. Filter month dan year default ke bulan dan tahun saat ini jika tidak dikirim.",
+      security: [{ bearerAuth: [] }],
+      parameters: [
+        {
+          in: "query",
+          name: "month",
+          required: false,
+          description: "Bulan 1–12. Default: bulan saat ini.",
+          schema: { type: "integer", minimum: 1, maximum: 12 },
+        },
+        {
+          in: "query",
+          name: "year",
+          required: false,
+          description: "Tahun kalender. Default: tahun saat ini.",
+          schema: { type: "integer", minimum: 2000 },
+        },
+      ],
     },
   })
   .get("/today", async ({ authUser }) => ({

@@ -115,21 +115,26 @@ Mendapatkan riwayat absensi karyawan.
 - **URL:** `GET /api/attendances/history`
 - **Headers:** `Authorization: Bearer <token>`
 - **Query Params:**
-  - `month` _(integer, opsional)_: Filter bulan (1-12)
-  - `year` _(integer, opsional)_: Filter tahun (contoh: 2023)
+  - `month` _(integer, opsional)_: Filter bulan (1-12). Default ke bulan saat ini (Asia/Jakarta).
+  - `year` _(integer, opsional)_: Filter tahun. Default ke tahun saat ini (Asia/Jakarta).
+  - Jika hanya salah satu parameter dikirim, parameter lainnya tetap memakai nilai saat ini.
 - **Success Response `200 OK`:**
   ```json
   {
     "status": "success",
+    "statusCode": 200,
     "data": [
-      {
-        "id": 1,
-        "date": "2023-10-25",
-        "check_in_time": "08:00:00",
-        "check_out_time": "17:00:00",
-        "check_in_photo": "https://example.com/attendances/checkin-budi.jpg",
-        "status": "Hadir"
-      }
+    {
+      "id": 1,
+      "date": "2026-10-25",
+      "check_in_time": "08:00:00",
+      "check_out_time": null,
+      "check_in_photo": "http://localhost:3000/uploads/checkin/1760000000000.jpg",
+      "status": "Hadir"
+    }
     ]
   }
   ```
+- Jika tidak ada absensi pada bulan dan tahun terpilih, `data` berisi array kosong.
+- Waktu dikembalikan dalam zona waktu `Asia/Jakarta` dengan format `HH:mm:ss`.
+- Query di luar rentang, misalnya `month=13`, mengembalikan `400 Bad Request`.

@@ -58,6 +58,7 @@ const [
   { userController, protectedUserController },
   { authController },
   { attendancesController },
+  { leavesController },
   { errorMiddleware },
   { users, attendances, leaves },
   jwtModule,
@@ -69,6 +70,7 @@ const [
   import("../../src/features/user/controller"),
   import("../../src/features/auth/controller"),
   import("../../src/features/attendances/controller"),
+  import("../../src/features/leaves/controller"),
   import("../../src/middleware/error"),
   import("../../src/db/schema"),
   import("jsonwebtoken"),
@@ -88,7 +90,8 @@ export const api = new Elysia()
   .use(userController)
   .use(protectedUserController)
   .use(authController)
-  .use(attendancesController);
+  .use(attendancesController)
+  .use(leavesController);
 
 let userSequence = 0;
 const temporaryUploadsByNamespace = new Map<string, Set<string>>();

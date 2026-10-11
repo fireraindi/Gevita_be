@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, lt } from "drizzle-orm";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { db } from "../../db";
@@ -6,9 +6,9 @@ import { attendances } from "../../db/schema";
 import { ConflictError } from "../../errors/errors";
 import { validate } from "../../helpers/validate";
 import { getCheckInPhotoUrl } from "../../helpers/photo";
-import type { CheckInRequest } from "./model/request";
-import type { CheckInAttendanceData, CheckOutAttendanceData, TodayAttendanceData } from "./model/response";
-import { checkInSchema } from "./validation";
+import type { AttendanceHistoryQueryInput, CheckInRequest } from "./model/request";
+import type { AttendanceHistoryItem, CheckInAttendanceData, CheckOutAttendanceData, TodayAttendanceData } from "./model/response";
+import { attendanceHistoryQuerySchema, checkInSchema } from "./validation";
 
 const attendanceTimeZone = "Asia/Jakarta";
 let lastPhotoTimestamp = 0;
@@ -37,6 +37,19 @@ export function determineAttendanceStatus(now: Date): "Hadir" | "Terlambat" {
     hourCycle: "h23",
   }).format(now);
   return time > "08:00:00" ? "Terlambat" : "Hadir";
+}
+
+export function formatTimeOnly(date: Date | null): string | null {
+  if (!date) return null;
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: attendanceTimeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const part = (type: string) => parts.find((item) => item.type === type)?.value ?? "00";
+  return `${part("hour")}:${part("minute")}:${part("second")}`;
 }
 
 export async function findAttendanceByUserIdAndDate(userId: string, date: string) {
@@ -186,4 +199,46 @@ export async function getTodayAttendance(userId: string): Promise<TodayAttendanc
     ...attendance,
     check_in_photo: checkInPhoto,
   };
+}
+
+export async function getAttendanceHistory(
+  userId: string,
+  query: AttendanceHistoryQueryInput,
+): Promise<AttendanceHistoryItem[]> {
+  const input = validate(attendanceHistoryQuerySchema, query);
+  const now = new Date();
+  const [currentYear, currentMonth] = getCurrentDate(now).split("-").map(Number);
+  const year = input.year ?? currentYear;
+  const month = input.month ?? currentMonth;
+  const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
+  const endDate = new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 10);
+
+  const rows = await db.select({
+    id: attendances.id,
+    date: attendances.date,
+    checkInTime: attendances.check_in_time,
+    checkOutTime: attendances.check_out_time,
+    checkInPhoto: attendances.check_in_photo,
+    status: attendances.status,
+  })
+    .from(attendances)
+    .where(and(
+      eq(attendances.user_id, userId),
+      gte(attendances.date, startDate),
+      lt(attendances.date, endDate),
+    ))
+    .orderBy(desc(attendances.date));
+
+  return rows.map((row) => {
+    const checkInPhoto = getCheckInPhotoUrl(row.checkInPhoto);
+    if (!checkInPhoto) throw new Error("Attendance check-in photo is missing");
+    return {
+      id: row.id,
+      date: row.date,
+      check_in_time: formatTimeOnly(row.checkInTime)!,
+      check_out_time: formatTimeOnly(row.checkOutTime),
+      check_in_photo: checkInPhoto,
+      status: row.status,
+    };
+  });
 }

@@ -43,3 +43,18 @@ export interface TodayAttendanceResponse {
   statusCode: 200;
   data: TodayAttendanceData | null;
 }
+
+export interface AttendanceHistoryItem {
+  id: number;
+  date: string;
+  check_in_time: string;
+  check_out_time: string | null;
+  check_in_photo: string;
+  status: string;
+}
+
+export interface AttendanceHistoryResponse {
+  status: "success";
+  statusCode: 200;
+  data: AttendanceHistoryItem[];
+}

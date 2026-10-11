@@ -2,7 +2,7 @@ import { boolean, date, pgEnum, pgTable, serial, text, timestamp, unique, varcha
 
 export const roleEnum = pgEnum("role", ["admin", "employee"]);
 export const leaveStatusEnum = pgEnum("leave_status", ["Pending", "Approved", "Rejected"]);
-export const categoryEnum = pgEnum("category", ["sakit", "cuti"]);
+export const categoryEnum = pgEnum("category", ["Sakit", "Izin"]);
 export const attendanceStatusEnum = pgEnum("attendance_status", ["Hadir", "Terlambat", "Tidak Hadir", "Sakit", "Cuti", "Dinas"]);
 
 export const users = pgTable("users", {
