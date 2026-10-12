@@ -3,12 +3,13 @@ import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { db } from "../../db";
 import { leaves } from "../../db/schema";
+import { ForbiddenError, NotFoundError } from "../../errors/errors";
 import { getLeavePhotoUrl } from "../../helpers/photo";
 import { validate } from "../../helpers/validate";
-import { createLeaveSchema, leaveHistoryQuerySchema } from "./validation";
+import { createLeaveSchema, leaveHistoryQuerySchema, leaveIdParamSchema } from "./validation";
 import type { LeaveHistoryQuery } from "./validation";
 import type { CreateLeaveRequest } from "./model/request";
-import type { LeaveResponseData } from "./model/response";
+import type { LeaveDetailData, LeaveResponseData } from "./model/response";
 
 let lastLeaveImageTimestamp = 0;
 
@@ -123,4 +124,30 @@ export async function getLeaveHistory(userId: string, query: LeaveHistoryQuery):
     image: getLeavePhotoUrl(row.image),
     created_at: row.created_at.toISOString(),
   }));
+}
+
+export async function getLeaveDetail(
+  currentUser: { id: string; role: "admin" | "employee" },
+  leaveId: number,
+): Promise<LeaveDetailData> {
+  const input = validate(leaveIdParamSchema, { id: leaveId });
+  const [leave] = await db.select().from(leaves)
+    .where(and(eq(leaves.id, input.id), isNull(leaves.deleted_at)))
+    .limit(1);
+
+  if (!leave) throw new NotFoundError("Leave data not found");
+  if (currentUser.role !== "admin" && leave.user_id !== currentUser.id) {
+    throw new ForbiddenError("Forbidden");
+  }
+
+  return {
+    id: leave.id,
+    start_date: leave.start_date,
+    end_date: leave.end_date,
+    reason: leave.reason,
+    status: leave.status,
+    image: getLeavePhotoUrl(leave.image),
+    created_at: leave.created_at.toISOString(),
+    updated_at: leave.updated_at.toISOString(),
+  };
 }

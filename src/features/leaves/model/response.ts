@@ -21,6 +21,34 @@ export interface LeaveHistoryResponse {
   data: LeaveResponseData[];
 }
 
+export interface LeaveDetailData {
+  id: number;
+  start_date: string;
+  end_date: string;
+  reason: string;
+  status: LeaveStatus;
+  image: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LeaveDetailResponse {
+  status: "success";
+  data: LeaveDetailData;
+}
+
+export interface ForbiddenErrorResponse {
+  status: "error";
+  statusCode: 403;
+  errors: "Forbidden";
+}
+
+export interface NotFoundErrorResponse {
+  status: "error";
+  statusCode: 404;
+  errors: string;
+}
+
 export type ValidationErrorDetails = Record<string, string[]>;
 
 export interface BadRequestErrorResponse {

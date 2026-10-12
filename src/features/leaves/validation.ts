@@ -38,4 +38,11 @@ export const leaveHistoryQuerySchema = z.object({
   date: z.union([monthSchema, z.literal("")]).optional(),
 });
 
+export const leaveIdParamSchema = z.object({
+  id: z.coerce.number({ error: "Leave ID must be a number" })
+    .int("Leave ID must be an integer")
+    .positive("Leave ID must be a positive integer"),
+});
+
 export type LeaveHistoryQuery = z.infer<typeof leaveHistoryQuerySchema>;
+export type LeaveIdParam = z.infer<typeof leaveIdParamSchema>;

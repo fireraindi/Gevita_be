@@ -14,10 +14,10 @@ Melakukan pengajuan cuti baru.
 - **Headers:** `Authorization: Bearer <token>`
 - **Content-Type:** `multipart/form-data`
 - **Request Body:**
-  - `start_date` *(string, wajib)*: Tanggal mulai (format: `YYYY-MM-DD`)
-  - `end_date` *(string, wajib)*: Tanggal selesai (format: `YYYY-MM-DD`)
-  - `reason` *(string, wajib)*: Alasan cuti
-  - `image` *(file image, opsional)*: Dokumen pendukung (misal: surat sakit)
+  - `start_date` _(string, wajib)_: Tanggal mulai (format: `YYYY-MM-DD`)
+  - `end_date` _(string, wajib)_: Tanggal selesai (format: `YYYY-MM-DD`)
+  - `reason` _(string, wajib)_: Alasan cuti
+  - `image` _(file image, opsional)_: Dokumen pendukung (misal: surat sakit)
 - **Success Response `201 Created`:**
   ```json
   {
@@ -51,7 +51,7 @@ Mendapatkan daftar semua pengajuan cuti milik karyawan yang login.
 - **URL:** `GET /api/leaves`
 - **Headers:** `Authorization: Bearer <token>`
 - **Query Params:**
-  - `status` *(string, opsional)*: Filter berdasarkan status (`Pending`, `Approved`, `Rejected`)
+  - `status` _(string, opsional)_: Filter berdasarkan status (`Pending`, `Approved`, `Rejected`)
 - **Success Response `200 OK`:**
   ```json
   {
@@ -79,7 +79,7 @@ Mendapatkan detail satu pengajuan cuti berdasarkan ID.
 - **URL:** `GET /api/leaves/{id}`
 - **Headers:** `Authorization: Bearer <token>`
 - **URL Params:**
-  - `id` *(integer, wajib)*: ID pengajuan cuti
+  - `id` _(integer, wajib)_: ID pengajuan cuti
 - **Success Response `200 OK`:**
   ```json
   {

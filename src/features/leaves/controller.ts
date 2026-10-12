@@ -1,8 +1,8 @@
 import { Elysia, t } from "elysia";
 import { authMiddleware } from "../../middleware/auth";
 import type { CreateLeaveRequest } from "./model/request";
-import type { CreateLeaveSuccessResponse, LeaveHistoryResponse } from "./model/response";
-import { createLeave, getLeaveHistory } from "./service";
+import type { CreateLeaveSuccessResponse, LeaveDetailResponse, LeaveHistoryResponse } from "./model/response";
+import { createLeave, getLeaveDetail, getLeaveHistory } from "./service";
 import type { LeaveHistoryQuery } from "./validation";
 
 export const leavesController = new Elysia({ prefix: "/api/leaves" })
@@ -33,6 +33,45 @@ export const leavesController = new Elysia({ prefix: "/api/leaves" })
         { in: "query", name: "status", required: false, schema: { type: "string", enum: ["Pending", "Approved", "Rejected"] } },
         { in: "query", name: "date", required: false, description: "Bulan dan tahun YYYY-MM. Default: bulan berjalan jika kosong.", schema: { type: "string", pattern: "^\\d{4}-(0[1-9]|1[0-2])$", example: "2026-10" } },
       ],
+    },
+  })
+  .get("/:id", async ({ authUser, params }): Promise<LeaveDetailResponse> => ({
+    status: "success",
+    data: await getLeaveDetail(authUser, Number(params.id)),
+  }), {
+    params: t.Object({
+      id: t.Numeric({ description: "Leave request ID", minimum: 1, error: "Leave ID must be a positive integer" }),
+    }),
+    response: {
+      200: t.Object({
+        status: t.Literal("success"),
+        data: t.Object({
+          id: t.Number(),
+          start_date: t.String(),
+          end_date: t.String(),
+          reason: t.String(),
+          status: t.Union([t.Literal("Pending"), t.Literal("Approved"), t.Literal("Rejected")]),
+          image: t.Nullable(t.String()),
+          created_at: t.String(),
+          updated_at: t.String(),
+        }),
+      }),
+      400: t.Object({
+        status: t.Literal("error"),
+        statusCode: t.Literal(400),
+        errors: t.Union([t.Record(t.String(), t.Array(t.String())), t.String()]),
+      }),
+      401: t.Object({ status: t.Literal("error"), statusCode: t.Literal(401), errors: t.Literal("Unauthorized") }),
+      403: t.Object({ status: t.Literal("error"), statusCode: t.Literal(403), errors: t.Literal("Forbidden") }),
+      404: t.Object({ status: t.Literal("error"), statusCode: t.Literal(404), errors: t.String() }),
+      500: t.Object({ status: t.Literal("error"), statusCode: t.Literal(500), errors: t.Literal("Internal server error") }),
+    },
+    detail: {
+      tags: ["Leaves"],
+      summary: "Get leave detail by ID",
+      description: "Retrieve a leave request by ID. Admins can view any request; employees can only view their own requests.",
+      security: [{ bearerAuth: [] }],
+      parameters: [{ in: "path", name: "id", required: true, description: "Numeric leave request ID", schema: { type: "integer", minimum: 1 } }],
     },
   })
   .post("", async ({ body, authUser, set }): Promise<CreateLeaveSuccessResponse> => {
