@@ -1,11 +1,37 @@
 import { Elysia, t } from "elysia";
 import { authMiddleware } from "../../middleware/auth";
-import { checkIn, checkOut, getAttendanceHistory, getTodayAttendance } from "./service";
+import { checkIn, checkOut, getAttendanceHistory, getAttendanceStats, getTodayAttendance } from "./service";
 import type { AttendanceHistoryQueryInput, CheckInRequest } from "./model/request";
-import type { AttendanceHistoryResponse, CheckInResponse, CheckOutResponse } from "./model/response";
+import type { AttendanceHistoryResponse, AttendanceStatsResponse, CheckInResponse, CheckOutResponse } from "./model/response";
 
 export const attendancesController = new Elysia({ prefix: "/api/attendances" })
   .use(authMiddleware)
+  .get("/stats", async ({ authUser }): Promise<AttendanceStatsResponse> => ({
+    status: "success",
+    statusCode: 200,
+    message: "Success get stats attendance",
+    data: await getAttendanceStats(authUser.id),
+  }), {
+    response: {
+      200: t.Object({
+        status: t.Literal("success"),
+        statusCode: t.Literal(200),
+        message: t.Literal("Success get stats attendance"),
+        data: t.Object({
+          totalAttendance: t.Number(),
+          sickLeave: t.Number(),
+          personalLeave: t.Number(),
+        }),
+      }),
+      401: t.Object({ status: t.Literal("error"), statusCode: t.Literal(401), errors: t.String() }),
+    },
+    detail: {
+      tags: ["Attendances"],
+      summary: "Get attendance stats",
+      description: "Mengambil statistik total absensi, cuti sakit, dan izin pada bulan dan tahun berjalan untuk pengguna yang sedang login.",
+      security: [{ bearerAuth: [] }],
+    },
+  })
   .post("", async ({ body, authUser }): Promise<CheckInResponse> => ({
     status: "success" as const,
     statusCode: 200 as const,

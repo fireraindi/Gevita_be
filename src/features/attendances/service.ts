@@ -1,13 +1,13 @@
-import { and, desc, eq, gte, isNull, lt } from "drizzle-orm";
+import { and, count, desc, eq, gte, isNull, lt } from "drizzle-orm";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { db } from "../../db";
-import { attendances } from "../../db/schema";
+import { attendances, leaves } from "../../db/schema";
 import { ConflictError } from "../../errors/errors";
 import { validate } from "../../helpers/validate";
 import { getCheckInPhotoUrl } from "../../helpers/photo";
 import type { AttendanceHistoryQueryInput, CheckInRequest } from "./model/request";
-import type { AttendanceHistoryItem, CheckInAttendanceData, CheckOutAttendanceData, TodayAttendanceData } from "./model/response";
+import type { AttendanceHistoryItem, AttendanceStatsData, CheckInAttendanceData, CheckOutAttendanceData, TodayAttendanceData } from "./model/response";
 import { attendanceHistoryQuerySchema, checkInSchema } from "./validation";
 
 const attendanceTimeZone = "Asia/Jakarta";
@@ -22,6 +22,53 @@ export function getCurrentDate(now: Date): string {
   }).formatToParts(now);
   const part = (type: string) => parts.find((item) => item.type === type)?.value ?? "";
   return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+export function getCurrentMonthRange(now: Date = new Date()): { startDate: string; endDate: string } {
+  const [year, month] = getCurrentDate(now).split("-").map(Number);
+  const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
+  const endDate = new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 10);
+  return { startDate, endDate };
+}
+
+export async function countUserAttendancesInMonth(userId: string, startDate: string, endDate: string): Promise<number> {
+  const [row] = await db.select({ total: count() })
+    .from(attendances)
+    .where(and(
+      eq(attendances.user_id, userId),
+      gte(attendances.date, startDate),
+      lt(attendances.date, endDate),
+    ));
+  return Number(row?.total ?? 0);
+}
+
+export async function countUserLeavesByCategoryInMonth(
+  userId: string,
+  category: "Sakit" | "Izin",
+  startDate: string,
+  endDate: string,
+): Promise<number> {
+  const [row] = await db.select({ total: count() })
+    .from(leaves)
+    .where(and(
+      eq(leaves.user_id, userId),
+      eq(leaves.category, category),
+      eq(leaves.status, "Approved"),
+      gte(leaves.start_date, startDate),
+      lt(leaves.start_date, endDate),
+      isNull(leaves.deleted_at),
+    ));
+  return Number(row?.total ?? 0);
+}
+
+export async function getAttendanceStats(userId: string): Promise<AttendanceStatsData> {
+  const { startDate, endDate } = getCurrentMonthRange(new Date());
+  const [totalAttendance, sickLeave, personalLeave] = await Promise.all([
+    countUserAttendancesInMonth(userId, startDate, endDate),
+    countUserLeavesByCategoryInMonth(userId, "Sakit", startDate, endDate),
+    countUserLeavesByCategoryInMonth(userId, "Izin", startDate, endDate),
+  ]);
+  return { totalAttendance, sickLeave, personalLeave };
 }
 
 export function getCurrentTimestamp(now: Date): Date {

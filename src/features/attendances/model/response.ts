@@ -58,3 +58,16 @@ export interface AttendanceHistoryResponse {
   statusCode: 200;
   data: AttendanceHistoryItem[];
 }
+
+export interface AttendanceStatsData {
+  totalAttendance: number;
+  sickLeave: number;
+  personalLeave: number;
+}
+
+export interface AttendanceStatsResponse {
+  status: "success";
+  statusCode: 200;
+  message: "Success get stats attendance";
+  data: AttendanceStatsData;
+}

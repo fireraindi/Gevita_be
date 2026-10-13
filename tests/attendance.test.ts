@@ -5,6 +5,7 @@ import {
   eq,
   testDb,
   testAttendances,
+  testLeaves,
   isolateApiNamespace,
   requestForm,
   requestJson,
@@ -265,6 +266,59 @@ describe("Attendance API", () => {
         token,
       );
       expect(response.status).toBe(400);
+    });
+  });
+
+  describe("Get attendance stats", () => {
+    test("rejects a request without a token", async () => {
+      const { response, body } = await requestJson("/api/attendances/stats", "GET");
+      expect(response.status).toBe(401);
+      expect(body.errors).toBe("Unauthorized");
+    });
+
+    test("returns zero counts for a new user", async () => {
+      const { token } = await createUserAndLogin(namespace);
+      const { response, body } = await requestJson("/api/attendances/stats", "GET", undefined, token);
+      expect(response.status).toBe(200);
+      expect(body).toEqual({
+        status: "success",
+        statusCode: 200,
+        message: "Success get stats attendance",
+        data: { totalAttendance: 0, sickLeave: 0, personalLeave: 0 },
+      });
+    });
+
+    test("counts only current-month records for the authenticated user and excludes soft-deleted leaves", async () => {
+      setSystemTime(new Date("2026-10-15T02:00:00.000Z"));
+      const { token } = await createUserAndLogin(namespace);
+      const userId = verifyToken(token).id;
+      const { token: otherToken } = await createUserAndLogin(namespace);
+      const otherUserId = verifyToken(otherToken).id;
+
+      await seedAttendance(userId, "2026-10-01");
+      await seedAttendance(userId, "2026-10-14");
+      await seedAttendance(userId, "2026-09-30");
+      await seedAttendance(otherUserId, "2026-10-10");
+
+      const seedLeave = (ownerId: string, startDate: string, category: "Sakit" | "Izin", deletedAt: Date | null = null) =>
+        testDb.insert(testLeaves).values({
+          user_id: ownerId,
+          start_date: startDate,
+          end_date: startDate,
+          reason: "test",
+          category,
+          status: "Approved",
+          deleted_at: deletedAt,
+        });
+      await seedLeave(userId, "2026-10-03", "Sakit");
+      await seedLeave(userId, "2026-10-04", "Izin");
+      await seedLeave(userId, "2026-09-30", "Sakit");
+      await seedLeave(userId, "2026-10-05", "Sakit", new Date("2026-10-06T00:00:00.000Z"));
+      await seedLeave(otherUserId, "2026-10-05", "Izin");
+
+      const { response, body } = await requestJson("/api/attendances/stats", "GET", undefined, token);
+      expect(response.status).toBe(200);
+      expect(body.data).toEqual({ totalAttendance: 2, sickLeave: 1, personalLeave: 1 });
     });
   });
 });
