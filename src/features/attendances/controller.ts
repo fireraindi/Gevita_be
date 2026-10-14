@@ -105,7 +105,7 @@ export const attendancesController = new Elysia({ prefix: "/api/attendances" })
     detail: {
       tags: ["Attendances"],
       summary: "Get attendance history",
-      description: "Mengambil daftar riwayat absensi pengguna yang sedang login. Filter month dan year default ke bulan dan tahun saat ini jika tidak dikirim.",
+      description: "Mengambil daftar riwayat absensi pengguna yang sedang login. Filter month dan year default ke bulan dan tahun saat ini. limit dan desc opsional; desc default true (terbaru dahulu).",
       security: [{ bearerAuth: [] }],
       parameters: [
         {
@@ -121,6 +121,20 @@ export const attendancesController = new Elysia({ prefix: "/api/attendances" })
           required: false,
           description: "Tahun kalender. Default: tahun saat ini.",
           schema: { type: "integer", minimum: 2000 },
+        },
+        {
+          in: "query",
+          name: "limit",
+          required: false,
+          description: "Limit jumlah data (1–31). Default: 31.",
+          schema: { type: "integer", minimum: 1 },
+        },
+        {
+          in: "query",
+          name: "desc",
+          required: false,
+          description: "Urutkan dari tanggal terbaru (true) atau terlama (false). Default: true.",
+          schema: { type: "boolean", default: true },
         },
       ],
     },

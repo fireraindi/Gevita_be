@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { AttendanceHistoryQueryInput } from "./model/request";
 import type { CheckInRequest } from "./model/request";
 
 const allowedExtensions = new Set([".jpg", ".jpeg", ".png", ".webp"]);
@@ -35,6 +36,12 @@ const optionalInteger = (field: string, minimum: number, maximum: number) => z.p
 export const attendanceHistoryQuerySchema = z.object({
   month: optionalInteger("Month", 1, 12),
   year: optionalInteger("Year", 2000, currentYear + 10),
-});
+  limit: optionalInteger("Limit", 1, 31),
+  desc: z.preprocess((value) => {
+    if (value === "true") return true;
+    if (value === "false") return false;
+    return value;
+  }, z.boolean().optional()),
+}) satisfies z.ZodType<AttendanceHistoryQueryInput>;
 
 export type AttendanceHistoryQuery = z.infer<typeof attendanceHistoryQuerySchema>;

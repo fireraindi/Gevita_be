@@ -34,6 +34,7 @@ export async function getCurrentUser(id: string) {
   const [user] = await db.select({
     id: users.id,
     name: users.name,
+    phone: users.phone,
     email: users.email,
     position: users.position,
     photo: users.photo,

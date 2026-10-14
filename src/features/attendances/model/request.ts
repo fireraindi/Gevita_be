@@ -5,4 +5,6 @@ export interface CheckInRequest {
 export interface AttendanceHistoryQueryInput {
   month?: string | number;
   year?: string | number;
+  limit?: number;
+  desc?: string | boolean;
 }

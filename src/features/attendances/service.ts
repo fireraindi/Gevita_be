@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gte, isNull, lt } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, isNull, lt } from "drizzle-orm";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { db } from "../../db";
@@ -274,7 +274,8 @@ export async function getAttendanceHistory(
       gte(attendances.date, startDate),
       lt(attendances.date, endDate),
     ))
-    .orderBy(desc(attendances.date));
+    .orderBy((input.desc ?? true) ? desc(attendances.date) : asc(attendances.date))
+    .limit(input.limit ?? 31);
 
   return rows.map((row) => {
     const checkInPhoto = getCheckInPhotoUrl(row.checkInPhoto);

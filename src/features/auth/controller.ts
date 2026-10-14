@@ -66,6 +66,7 @@ const protectedAuthController = new Elysia()
         data: t.Object({
           id: t.String(),
           name: t.String(),
+          phone: t.String(),
           email: t.String(),
           position: t.String(),
           photo: t.Union([t.String(), t.Null()]),
