@@ -6,4 +6,10 @@ export interface RegisterRequest {
   position: string;
   role: "admin" | "employee";
   photo?: File;
+  salary: number;
+  supportSalary: number;
+  overtimeSalary: number;
+  pocketMoney: number;
+  bank: string;
+  accountNumber: string;
 }

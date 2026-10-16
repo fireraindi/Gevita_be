@@ -3,12 +3,14 @@ import { changePassword, createUser } from "./service";
 import type { RegisterRequest } from "./model/request";
 import type { RegisterUserResponse } from "./model/response";
 import { authMiddleware } from "../../middleware/auth";
+import { assertAdmin } from "../../helpers/role";
 import type { ChangePasswordInput } from "./validation";
 
-export const userController = new Elysia({ prefix: "/api/users" }).post(
+export const userController = new Elysia({ prefix: "/api/users" }).use(authMiddleware).post(
   "",
-  async ({ body, set }): Promise<RegisterUserResponse> => {
+  async ({ body, set, authUser }): Promise<RegisterUserResponse> => {
     try {
+      assertAdmin(authUser);
       const user = await createUser(body as RegisterRequest);
       set.status = 201;
       return { status: "success", statusCode: 201, message: "Success create user", data: user };
@@ -31,44 +33,60 @@ export const userController = new Elysia({ prefix: "/api/users" }).post(
           role: t.Union([t.Literal("admin"), t.Literal("employee")]),
           isActive: t.Boolean(),
           createdAt: t.Date(),
+          salary: t.Number(),
+          supportSalary: t.Number(),
+          overtimeSalary: t.Number(),
+          pocketMoney: t.Number(),
+          bank: t.String(),
+          accountNumber: t.String(),
         }),
       }),
-      400: t.Object({ status: t.Literal("error"), statusCode: t.Literal(400), errors: t.Unknown() }),
-      409: t.Object({ status: t.Literal("error"), statusCode: t.Literal(409), errors: t.Unknown() }),
+      400: t.Object({ status: t.Literal("error"), statusCode: t.Literal(400), errors: t.Record(t.String(), t.Array(t.String())) }),
+      401: t.Object({ status: t.Literal("error"), statusCode: t.Literal(401), errors: t.String() }),
+      403: t.Object({ status: t.Literal("error"), statusCode: t.Literal(403), errors: t.String() }),
+      409: t.Object({ status: t.Literal("error"), statusCode: t.Literal(409), errors: t.String() }),
+      500: t.Object({ status: t.Literal("error"), statusCode: t.Literal(500), errors: t.String() }),
     },
     detail: {
       tags: ["Users"],
       summary: "Register user",
       description: "Mendaftarkan pengguna baru. Foto profil bersifat opsional.",
+      security: [{ bearerAuth: [] }],
       requestBody: {
         required: true,
         content: {
           "multipart/form-data": {
             schema: {
               type: "object",
-              required: ["name", "phone", "email", "password", "position", "role"],
+              required: ["name", "phone", "email", "password", "position", "role", "salary", "supportSalary", "overtimeSalary", "pocketMoney", "bank", "accountNumber"],
               properties: {
                 name: { type: "string", minLength: 1, maxLength: 100 },
                 phone: { type: "string", pattern: "^\\d{10,20}$", description: "10–20 digit nomor telepon." },
                 email: { type: "string", format: "email", minLength: 5, maxLength: 100 },
-                password: { type: "string", minLength: 4, maxLength: 100 },
+                password: { type: "string", minLength: 4, maxLength: 100, pattern: "^\\d+$" },
                 position: { type: "string", minLength: 1, maxLength: 100 },
                 role: { type: "string", enum: ["admin", "employee"] },
-                photo: { type: "string", format: "binary", description: "File foto profil opsional (JPG, PNG, atau WebP)." },
+                photo: { type: "string", format: "binary", description: "Foto profil opsional, maksimal 1 MB (JPG, PNG, atau WebP)." },
+                salary: { type: "integer", minimum: 1 }, supportSalary: { type: "integer", minimum: 1 },
+                overtimeSalary: { type: "integer", minimum: 1 }, pocketMoney: { type: "integer", minimum: 1 },
+                bank: { type: "string", minLength: 1, maxLength: 100 }, accountNumber: { type: "string", minLength: 1, maxLength: 50 },
               },
             },
           },
           "application/json": {
             schema: {
               type: "object",
-              required: ["name", "phone", "email", "password", "position", "role"],
+              required: ["name", "phone", "email", "password", "position", "role", "salary", "supportSalary", "overtimeSalary", "pocketMoney", "bank", "accountNumber"],
               properties: {
                 name: { type: "string", minLength: 1, maxLength: 100 },
                 phone: { type: "string", pattern: "^\\d{10,20}$" },
                 email: { type: "string", format: "email", minLength: 5, maxLength: 100 },
-                password: { type: "string", minLength: 4, maxLength: 100 },
+                password: { type: "string", minLength: 4, maxLength: 100, pattern: "^\\d+$" },
                 position: { type: "string", minLength: 1, maxLength: 100 },
                 role: { type: "string", enum: ["admin", "employee"] },
+                salary: { type: "integer", minimum: 1 }, supportSalary: { type: "integer", minimum: 1 },
+                overtimeSalary: { type: "integer", minimum: 1 }, pocketMoney: { type: "integer", minimum: 1 },
+                bank: { type: "string", minLength: 1, maxLength: 100 }, accountNumber: { type: "string", minLength: 1, maxLength: 50 },
               },
             },
           },

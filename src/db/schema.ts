@@ -1,4 +1,4 @@
-import { boolean, date, pgEnum, pgTable, serial, text, timestamp, unique, varchar } from "drizzle-orm/pg-core";
+import { boolean, date, integer, pgEnum, pgTable, serial, text, timestamp, unique, varchar } from "drizzle-orm/pg-core";
 
 export const roleEnum = pgEnum("role", ["admin", "employee"]);
 export const leaveStatusEnum = pgEnum("leave_status", ["Pending", "Approved", "Rejected"]);
@@ -17,6 +17,12 @@ export const users = pgTable("users", {
   is_active: boolean("is_active").notNull().default(true),
   created_at: timestamp("created_at").defaultNow().notNull(),
   updated_at: timestamp("updated_at").defaultNow().notNull(),
+  salary: integer("salary").notNull().default(0),
+  support_salary: integer("support_salary").notNull().default(0),
+  overtime_salary: integer("overtime_salary").notNull().default(0),
+  pocket_money: integer("pocket_money").notNull().default(0),
+  bank: varchar("bank", { length: 100 }).notNull(),
+  account_number: varchar("account_number", { length: 50 }).notNull(),
 });
 
 export const leaves = pgTable("leaves", {

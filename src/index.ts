@@ -7,6 +7,9 @@ import { protectedUserController, userController } from "./features/user/control
 import { authController } from "./features/auth/controller";
 import { attendancesController } from "./features/attendances/controller";
 import { leavesController } from "./features/leaves/controller";
+import { seedAdminUser } from "./db/seed-admin";
+
+await seedAdminUser();
 
 const app = new Elysia()
   .use(openapi({

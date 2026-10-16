@@ -7,7 +7,7 @@ import { changePasswordSchema, createUserSchema } from "./validation";
 import type { UserResponse } from "./model/response";
 import { RegisterRequest } from "./model/request";
 import { validate } from "../../helpers/validate";
-import { BadRequestError, NotFoundError, PasswordMismatchError } from "../../errors/errors";
+import { BadRequestError, ConflictError, NotFoundError, PasswordMismatchError } from "../../errors/errors";
 import type { ChangePasswordInput } from "./validation";
 
 const extensionByType: Record<string, string> = {
@@ -59,6 +59,12 @@ export async function createUser(request: RegisterRequest): Promise<UserResponse
       photo,
       is_active: true,
       created_at: new Date(),
+      salary: input.salary,
+      support_salary: input.supportSalary,
+      overtime_salary: input.overtimeSalary,
+      pocket_money: input.pocketMoney,
+      bank: input.bank,
+      account_number: input.accountNumber,
     }).returning({
       id: users.id,
       phone: users.phone,
@@ -67,10 +73,20 @@ export async function createUser(request: RegisterRequest): Promise<UserResponse
       role: users.role,
       isActive: users.is_active,
       createdAt: users.created_at,
+      salary: users.salary,
+      supportSalary: users.support_salary,
+      overtimeSalary: users.overtime_salary,
+      pocketMoney: users.pocket_money,
+      bank: users.bank,
+      accountNumber: users.account_number,
     });
+    if (!user) throw new Error("User insert did not return a row");
     return user;
   } catch (error) {
     if (storedPhoto) await unlink(storedPhoto.filepath).catch(() => undefined);
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "23505") {
+      throw new ConflictError("(email/phone) already exist");
+    }
     throw error;
   }
 }

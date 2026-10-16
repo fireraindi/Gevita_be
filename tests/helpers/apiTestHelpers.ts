@@ -78,6 +78,7 @@ const [
 ]);
 
 export const jwt = jwtModule.default;
+export const adminToken = jwt.sign({ id: "test-admin", role: "admin" }, process.env.JWT_SECRET);
 export const testDb = db;
 export const testUsers = users;
 export const testAttendances = attendances;
@@ -102,9 +103,15 @@ export function validUser(namespace: string, overrides: Record<string, unknown> 
     name: `${namespace} Test User`,
     phone: `628${String(userSequence).padStart(10, "0")}`,
     email: `${namespace}-${userSequence}@example.com`,
-    password: "valid-password",
+    password: "123456",
     position: "Engineer",
     role: "employee",
+    salary: 2000000,
+    supportSalary: 300000,
+    overtimeSalary: 20000,
+    pocketMoney: 600000,
+    bank: "BCA",
+    accountNumber: "2910921",
     ...overrides,
   };
 }
@@ -128,11 +135,11 @@ export async function requestForm(path: string, method: string, form: FormData, 
   return { response, body: await response.json() as Record<string, any> };
 }
 
-export async function registerUser(namespace: string, payload = validUser(namespace)) {
-  return requestJson("/api/users", "POST", payload);
+export async function registerUser(namespace: string, payload: Record<string, unknown> = validUser(namespace)) {
+  return requestJson("/api/users", "POST", payload, adminToken);
 }
 
-export async function loginUser(identifier: string, password = "valid-password") {
+export async function loginUser(identifier: string, password = "123456") {
   return requestJson("/api/auth/login", "POST", { identifier, password });
 }
 

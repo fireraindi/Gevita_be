@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import {
   createUserAndLogin,
+  adminToken,
+  jwt,
   isolateApiNamespace,
   loginUser,
   registerUser,
@@ -20,6 +22,19 @@ describe("User API", () => {
   isolateApiNamespace(namespace);
 
   describe("Register", () => {
+    test("requires an authorization token", async () => {
+      const { response, body } = await requestJson("/api/users", "POST", validUser(namespace));
+      expect(response.status).toBe(401);
+      expect(body.errors).toBe("Unauthorize");
+    });
+
+    test("rejects registration by an employee", async () => {
+      const token = jwt.sign({ id: "test-employee", role: "employee" }, String(process.env.JWT_SECRET));
+      const { response, body } = await requestJson("/api/users", "POST", validUser(namespace), token);
+      expect(response.status).toBe(403);
+      expect(body.errors).toBe("Forbiden");
+    });
+
     test("registers a user with valid JSON data", async () => {
       const payload = validUser(namespace);
       const { response, body } = await registerUser(namespace, payload);
@@ -27,6 +42,7 @@ describe("User API", () => {
       expect(body.status).toBe("success");
       expect(body.data.email).toBe(payload.email);
       expect(body.data.role).toBe("employee");
+      expect(body.data.salary).toBe(payload.salary);
     });
 
     test("registers a user with a profile photo using multipart form data", async () => {
@@ -34,7 +50,7 @@ describe("User API", () => {
       const form = new FormData();
       Object.entries(payload).forEach(([key, value]) => form.set(key, String(value)));
       form.set("photo", new File([new Uint8Array([1, 2, 3])], "avatar.png", { type: "image/png" }));
-      const { response, body } = await requestForm("/api/users", "POST", form);
+      const { response, body } = await requestForm("/api/users", "POST", form, adminToken);
       expect(response.status).toBe(201);
 
       const [user] = await testDb.select({ photo: testUsers.photo })
@@ -75,6 +91,17 @@ describe("User API", () => {
       expect(response.status).toBe(400);
     });
 
+    test("rejects a password containing non-numeric characters", async () => {
+      const { response, body } = await registerUser(namespace, validUser(namespace, { password: "12ab" }));
+      expect(response.status).toBe(400);
+      expect(body.errors.password).toContain("Password must contain only numbers");
+    });
+
+    test("rejects payroll amounts that are zero", async () => {
+      const { response } = await registerUser(namespace, validUser(namespace, { salary: 0 }));
+      expect(response.status).toBe(400);
+    });
+
     test("rejects a role outside the supported enum", async () => {
       const { response } = await registerUser(namespace, validUser(namespace, { role: "manager" }));
       expect(response.status).toBe(400);
@@ -111,7 +138,7 @@ describe("User API", () => {
         newPassword: "new-valid-password",
       });
       expect(response.status).toBe(401);
-      expect(body.errors).toBe("Unauthorized");
+      expect(body.errors).toBe("Unauthorize");
     });
 
     test("rejects an incorrect old password", async () => {

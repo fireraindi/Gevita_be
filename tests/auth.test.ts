@@ -57,6 +57,12 @@ describe("Auth API", () => {
         position: String(payload.position),
         role: "employee",
         is_active: false,
+        salary: Number(payload.salary),
+        support_salary: Number(payload.supportSalary),
+        overtime_salary: Number(payload.overtimeSalary),
+        pocket_money: Number(payload.pocketMoney),
+        bank: String(payload.bank),
+        account_number: String(payload.accountNumber),
       });
 
       const { response, body } = await loginUser(String(payload.email), String(payload.password));

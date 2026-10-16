@@ -49,7 +49,7 @@ export const errorMiddleware = new Elysia({ name: "error-middleware" }).onError(
 
   if (error instanceof UnauthorizedError) {
     set.status = 401;
-    return { status: "error", statusCode: 401, errors: error.message };
+    return { status: "error", statusCode: 401, errors: "Unauthorize" };
   }
 
   if (error instanceof ConflictError) {
@@ -64,7 +64,7 @@ export const errorMiddleware = new Elysia({ name: "error-middleware" }).onError(
 
   if (error instanceof ForbiddenError) {
     set.status = 403;
-    return { status: "error", statusCode: 403, errors: error.message };
+    return { status: "error", statusCode: 403, errors: error.message || "Forbiden" };
   }
 
   if (error instanceof NotFoundError) {
@@ -84,8 +84,7 @@ export const errorMiddleware = new Elysia({ name: "error-middleware" }).onError(
     return {
       status: "error",
       statusCode: 409,
-      message: "Conflict",
-      errors: { [uniqueField]: `${uniqueField} already exists` },
+      errors: "(email/phone) already exist",
     };
   }
 

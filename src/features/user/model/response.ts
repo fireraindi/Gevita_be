@@ -6,6 +6,12 @@ export interface UserResponse {
   role: "admin" | "employee";
   isActive: boolean;
   createdAt: Date;
+  salary: number;
+  supportSalary: number;
+  overtimeSalary: number;
+  pocketMoney: number;
+  bank: string;
+  accountNumber: string;
 }
 
 export interface RegisterUserResponse {
