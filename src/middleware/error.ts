@@ -49,7 +49,7 @@ export const errorMiddleware = new Elysia({ name: "error-middleware" }).onError(
 
   if (error instanceof UnauthorizedError) {
     set.status = 401;
-    return { status: "error", statusCode: 401, errors: "Unauthorize" };
+    return { status: "error", statusCode: 401, errors: "Unauthorized" };
   }
 
   if (error instanceof ConflictError) {
@@ -64,7 +64,7 @@ export const errorMiddleware = new Elysia({ name: "error-middleware" }).onError(
 
   if (error instanceof ForbiddenError) {
     set.status = 403;
-    return { status: "error", statusCode: 403, errors: error.message || "Forbiden" };
+    return { status: "error", statusCode: 403, errors: error.message || "Forbidden" };
   }
 
   if (error instanceof NotFoundError) {

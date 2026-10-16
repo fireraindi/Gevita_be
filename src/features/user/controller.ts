@@ -1,7 +1,8 @@
 import { Elysia, t } from "elysia";
-import { changePassword, createUser } from "./service";
+import { changePassword, createUser, getUserById } from "./service";
 import type { RegisterRequest } from "./model/request";
 import type { RegisterUserResponse } from "./model/response";
+import type { UserDetailResponse } from "./model/response";
 import { authMiddleware } from "../../middleware/auth";
 import { assertAdmin } from "../../helpers/role";
 import type { ChangePasswordInput } from "./validation";
@@ -98,6 +99,51 @@ export const userController = new Elysia({ prefix: "/api/users" }).use(authMiddl
 
 export const protectedUserController = new Elysia({ prefix: "/api/users" })
   .use(authMiddleware)
+  .get("/:id", async ({ authUser, params }): Promise<UserDetailResponse> => {
+    assertAdmin(authUser);
+    const user = await getUserById(params.id);
+    return {
+      status: "success",
+      statusCode: 200,
+      message: "Success get user detail",
+      data: user,
+    };
+  }, {
+    params: t.Object({ id: t.String({ description: "User UUID" }) }),
+    response: {
+      200: t.Object({
+        status: t.Literal("success"),
+        statusCode: t.Literal(200),
+        message: t.String(),
+        data: t.Object({
+          id: t.String(),
+          phone: t.String(),
+          email: t.String(),
+          position: t.String(),
+          role: t.Union([t.Literal("admin"), t.Literal("employee")]),
+          isActive: t.Boolean(),
+          photo: t.Nullable(t.String()),
+          createdAt: t.Union([t.Date(), t.String()]),
+          salary: t.Number(),
+          supportSalary: t.Number(),
+          overtimeSalary: t.Number(),
+          pocketMoney: t.Number(),
+          bank: t.String(),
+          accountNumber: t.String(),
+        }),
+      }),
+      401: t.Object({ status: t.Literal("error"), statusCode: t.Literal(401), errors: t.Literal("Unauthorized") }),
+      403: t.Object({ status: t.Literal("error"), statusCode: t.Literal(403), errors: t.Literal("Forbidden") }),
+      404: t.Object({ status: t.Literal("error"), statusCode: t.Literal(404), errors: t.Literal("User Not found") }),
+      500: t.Object({ status: t.Literal("error"), statusCode: t.Literal(500), errors: t.Literal("Internal server error") }),
+    },
+    detail: {
+      tags: ["Users"],
+      summary: "Get user detail (Admin Only)",
+      description: "Mengambil detail profil, payroll, dan rekening pengguna. Hanya admin yang dapat mengakses endpoint ini.",
+      security: [{ bearerAuth: [] }],
+    },
+  })
   .put("", async ({ body, authUser }) => {
     await changePassword(authUser.id, body as ChangePasswordInput);
     return { status: "success" as const, statusCode: 200 as const, message: "Success update password user" };

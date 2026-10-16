@@ -25,14 +25,14 @@ describe("User API", () => {
     test("requires an authorization token", async () => {
       const { response, body } = await requestJson("/api/users", "POST", validUser(namespace));
       expect(response.status).toBe(401);
-      expect(body.errors).toBe("Unauthorize");
+      expect(body.errors).toBe("Unauthorized");
     });
 
     test("rejects registration by an employee", async () => {
       const token = jwt.sign({ id: "test-employee", role: "employee" }, String(process.env.JWT_SECRET));
       const { response, body } = await requestJson("/api/users", "POST", validUser(namespace), token);
       expect(response.status).toBe(403);
-      expect(body.errors).toBe("Forbiden");
+      expect(body.errors).toBe("Forbidden");
     });
 
     test("registers a user with valid JSON data", async () => {
@@ -138,7 +138,7 @@ describe("User API", () => {
         newPassword: "new-valid-password",
       });
       expect(response.status).toBe(401);
-      expect(body.errors).toBe("Unauthorize");
+      expect(body.errors).toBe("Unauthorized");
     });
 
     test("rejects an incorrect old password", async () => {
@@ -166,6 +166,45 @@ describe("User API", () => {
         newPassword: "",
       }, token);
       expect(response.status).toBe(400);
+    });
+  });
+
+  describe("User detail", () => {
+    test("returns the user's detail for an admin", async () => {
+      const payload = validUser(namespace);
+      const created = await registerUser(namespace, payload);
+      const { response, body } = await requestJson(`/api/users/${created.body.data.id}`, "GET", undefined, adminToken);
+
+      expect(response.status).toBe(200);
+      expect(body.status).toBe("success");
+      expect(body.data.email).toBe(payload.email);
+      expect(body.data.salary).toBe(payload.salary);
+      expect(body.data.supportSalary).toBe(payload.supportSalary);
+      expect(body.data.overtimeSalary).toBe(payload.overtimeSalary);
+      expect(body.data.pocketMoney).toBe(payload.pocketMoney);
+      expect(body.data.bank).toBe(payload.bank);
+      expect(body.data.accountNumber).toBe(payload.accountNumber);
+      expect(body.data.photo).toBe("http://localhost:3000/uploads/profile/profile.webp");
+    });
+
+    test("rejects employee access", async () => {
+      const { payload, token } = await createUserAndLogin(namespace);
+      const { response, body } = await requestJson(`/api/users/${crypto.randomUUID()}`, "GET", undefined, token);
+      expect(response.status).toBe(403);
+      expect(body.errors).toBe("Forbidden");
+      expect(payload.role).toBe("employee");
+    });
+
+    test("requires authentication", async () => {
+      const { response, body } = await requestJson(`/api/users/${crypto.randomUUID()}`, "GET");
+      expect(response.status).toBe(401);
+      expect(body.errors).toBe("Unauthorized");
+    });
+
+    test("returns 404 when the user does not exist", async () => {
+      const { response, body } = await requestJson(`/api/users/${crypto.randomUUID()}`, "GET", undefined, adminToken);
+      expect(response.status).toBe(404);
+      expect(body.errors).toBe("User Not found");
     });
   });
 });

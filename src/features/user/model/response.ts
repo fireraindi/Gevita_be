@@ -20,3 +20,27 @@ export interface RegisterUserResponse {
   message: "Success create user";
   data: UserResponse;
 }
+
+export interface UserDetailData {
+  id: string;
+  phone: string;
+  email: string;
+  position: string;
+  role: "admin" | "employee";
+  isActive: boolean;
+  photo: string | null;
+  createdAt: Date | string;
+  salary: number;
+  supportSalary: number;
+  overtimeSalary: number;
+  pocketMoney: number;
+  bank: string;
+  accountNumber: string;
+}
+
+export interface UserDetailResponse {
+  status: "success";
+  statusCode: 200;
+  message: string;
+  data: UserDetailData;
+}

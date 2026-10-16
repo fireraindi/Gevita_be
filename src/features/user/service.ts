@@ -9,6 +9,8 @@ import { RegisterRequest } from "./model/request";
 import { validate } from "../../helpers/validate";
 import { BadRequestError, ConflictError, NotFoundError, PasswordMismatchError } from "../../errors/errors";
 import type { ChangePasswordInput } from "./validation";
+import { getProfilePhotoUrl } from "../../helpers/photo";
+import type { UserDetailData } from "./model/response";
 
 const extensionByType: Record<string, string> = {
   "image/jpeg": "jpg",
@@ -89,6 +91,28 @@ export async function createUser(request: RegisterRequest): Promise<UserResponse
     }
     throw error;
   }
+}
+
+export async function getUserById(id: string): Promise<UserDetailData> {
+  const [user] = await db.select({
+    id: users.id,
+    phone: users.phone,
+    email: users.email,
+    position: users.position,
+    role: users.role,
+    isActive: users.is_active,
+    photo: users.photo,
+    createdAt: users.created_at,
+    salary: users.salary,
+    supportSalary: users.support_salary,
+    overtimeSalary: users.overtime_salary,
+    pocketMoney: users.pocket_money,
+    bank: users.bank,
+    accountNumber: users.account_number,
+  }).from(users).where(eq(users.id, id)).limit(1);
+
+  if (!user) throw new NotFoundError("User Not found");
+  return { ...user, photo: getProfilePhotoUrl(user.photo) };
 }
 
 export async function changePassword(userId: string, request: ChangePasswordInput): Promise<void> {
