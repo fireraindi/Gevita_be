@@ -46,3 +46,18 @@ export interface UserDetailResponse {
   message: string;
   data: UserDetailData;
 }
+
+export interface UserListItemData {
+  id: string;
+  name: string;
+  phone: string;
+  position: string;
+  isActive: boolean;
+}
+
+export interface UserListResponse {
+  status: "success";
+  statusCode: 200;
+  message: string;
+  data: UserListItemData[];
+}

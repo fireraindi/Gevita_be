@@ -1,9 +1,9 @@
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, ilike, or } from "drizzle-orm";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { db } from "../../db";
 import { users } from "../../db/schema";
-import { changePasswordSchema, createUserSchema } from "./validation";
+import { changePasswordSchema, createUserSchema, userListQuerySchema } from "./validation";
 import type { UserResponse } from "./model/response";
 import { RegisterRequest } from "./model/request";
 import { validate } from "../../helpers/validate";
@@ -11,6 +11,8 @@ import { BadRequestError, ConflictError, NotFoundError, PasswordMismatchError } 
 import type { ChangePasswordInput } from "./validation";
 import { getProfilePhotoUrl } from "../../helpers/photo";
 import type { UserDetailData } from "./model/response";
+import type { UserListItemData } from "./model/response";
+import type { UserListQuery } from "./validation";
 
 const extensionByType: Record<string, string> = {
   "image/jpeg": "jpg",
@@ -115,6 +117,22 @@ export async function getUserById(id: string): Promise<UserDetailData> {
 
   if (!user) throw new NotFoundError("User Not found");
   return { ...user, photo: getProfilePhotoUrl(user.photo) };
+}
+
+export async function getUsers(query?: UserListQuery): Promise<UserListItemData[]> {
+  const input = query ? validate(userListQuerySchema, query) : {};
+  const search = input.search?.trim();
+  const whereClause = search
+    ? or(ilike(users.name, `%${search}%`), ilike(users.phone, `%${search}%`))
+    : undefined;
+
+  return db.select({
+    id: users.id,
+    name: users.name,
+    phone: users.phone,
+    position: users.position,
+    isActive: users.is_active,
+  }).from(users).where(whereClause).orderBy(desc(users.created_at));
 }
 
 export async function changePassword(userId: string, request: ChangePasswordInput): Promise<void> {

@@ -1,8 +1,9 @@
 import { Elysia, t } from "elysia";
-import { changePassword, createUser, getUserById } from "./service";
+import { changePassword, createUser, getUserById, getUsers } from "./service";
 import type { RegisterRequest } from "./model/request";
 import type { RegisterUserResponse } from "./model/response";
 import type { UserDetailResponse } from "./model/response";
+import type { UserListResponse } from "./model/response";
 import { authMiddleware } from "../../middleware/auth";
 import { assertAdmin } from "../../helpers/role";
 import type { ChangePasswordInput } from "./validation";
@@ -100,6 +101,43 @@ export const userController = new Elysia({ prefix: "/api/users" }).use(authMiddl
 
 export const protectedUserController = new Elysia({ prefix: "/api/users" })
   .use(authMiddleware)
+  .get("", async ({ authUser, query }): Promise<UserListResponse> => {
+    assertAdmin(authUser);
+    const userList = await getUsers(query);
+    return {
+      status: "success",
+      statusCode: 200,
+      message: "Success get users",
+      data: userList,
+    };
+  }, {
+    query: t.Object({
+      search: t.Optional(t.String({ description: "Search keyword for name or phone" })),
+    }),
+    response: {
+      200: t.Object({
+        status: t.Literal("success"),
+        statusCode: t.Literal(200),
+        message: t.String(),
+        data: t.Array(t.Object({
+          id: t.String(),
+          name: t.String(),
+          phone: t.String(),
+          position: t.String(),
+          isActive: t.Boolean(),
+        })),
+      }),
+      401: t.Object({ status: t.Literal("error"), statusCode: t.Literal(401), errors: t.Literal("Unauthorized") }),
+      403: t.Object({ status: t.Literal("error"), statusCode: t.Literal(403), errors: t.Literal("Forbidden") }),
+      500: t.Object({ status: t.Literal("error"), statusCode: t.Literal(500), errors: t.Literal("Internal server error") }),
+    },
+    detail: {
+      tags: ["Users"],
+      summary: "Get user list (Admin Only)",
+      description: "Mengambil daftar seluruh pengguna dengan filter pencarian opsional pada nama atau nomor telepon. Hanya dapat diakses oleh user dengan role admin.",
+      security: [{ bearerAuth: [] }],
+    },
+  })
   .get("/:id", async ({ authUser, params }): Promise<UserDetailResponse> => {
     assertAdmin(authUser);
     const user = await getUserById(params.id);

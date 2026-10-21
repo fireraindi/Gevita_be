@@ -207,4 +207,70 @@ describe("User API", () => {
       expect(body.errors).toBe("User Not found");
     });
   });
+
+  describe("User list", () => {
+    test("returns minimized user data for an admin", async () => {
+      const userA = validUser(namespace, { name: "List User Alpha" });
+      const userB = validUser(namespace, { name: "List User Beta" });
+      await registerUser(namespace, userA);
+      await registerUser(namespace, userB);
+
+      const { response, body } = await requestJson("/api/users", "GET", undefined, adminToken);
+      expect(response.status).toBe(200);
+      expect(body.status).toBe("success");
+      expect(body.message).toBe("Success get users");
+      expect(body.data).toHaveLength(2);
+      expect(body.data.map((user: { name: string }) => user.name).sort()).toEqual([userA.name, userB.name].sort());
+      for (const user of body.data) {
+        expect(user).toHaveProperty("id");
+        expect(user).toHaveProperty("name");
+        expect(user).toHaveProperty("phone");
+        expect(user).toHaveProperty("position");
+        expect(user).toHaveProperty("isActive");
+        expect(user).not.toHaveProperty("password");
+        expect(user).not.toHaveProperty("salary");
+        expect(user).not.toHaveProperty("bank");
+        expect(user).not.toHaveProperty("accountNumber");
+      }
+    });
+
+    test("searches by name and phone, ignoring case", async () => {
+      const nameUser = validUser(namespace, { name: "Unique SpecialName Person" });
+      const phoneUser = validUser(namespace, { phone: "628999988881" });
+      await registerUser(namespace, nameUser);
+      await registerUser(namespace, phoneUser);
+
+      const byName = await requestJson("/api/users?search=specialname", "GET", undefined, adminToken);
+      expect(byName.response.status).toBe(200);
+      expect(byName.body.data.map((user: { name: string }) => user.name)).toEqual([nameUser.name]);
+
+      const byPhone = await requestJson("/api/users?search=99998888", "GET", undefined, adminToken);
+      expect(byPhone.response.status).toBe(200);
+      expect(byPhone.body.data.map((user: { phone: string }) => user.phone)).toEqual([phoneUser.phone]);
+    });
+
+    test("returns an empty list when search has no matches", async () => {
+      const { response, body } = await requestJson("/api/users?search=non_existent_keyword_xyz123", "GET", undefined, adminToken);
+      expect(response.status).toBe(200);
+      expect(body.status).toBe("success");
+      expect(body.data).toEqual([]);
+    });
+
+    test("rejects employee access", async () => {
+      const token = jwt.sign({ id: "test-employee", role: "employee" }, String(process.env.JWT_SECRET));
+      const { response, body } = await requestJson("/api/users", "GET", undefined, token);
+      expect(response.status).toBe(403);
+      expect(body.errors).toBe("Forbidden");
+    });
+
+    test("requires a valid authorization token", async () => {
+      const unauthenticated = await requestJson("/api/users", "GET");
+      expect(unauthenticated.response.status).toBe(401);
+      expect(unauthenticated.body.errors).toBe("Unauthorized");
+
+      const invalid = await requestJson("/api/users", "GET", undefined, "invalid-token");
+      expect(invalid.response.status).toBe(401);
+      expect(invalid.body.errors).toBe("Unauthorized");
+    });
+  });
 });

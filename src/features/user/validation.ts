@@ -29,5 +29,10 @@ export const changePasswordSchema = z.object({
   newPassword: z.string().min(4).max(100),
 });
 
+export const userListQuerySchema = z.object({
+  search: z.string().trim().optional(),
+});
+
 export type CreateUserInput = z.infer<typeof createUserSchema>;
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+export type UserListQuery = z.infer<typeof userListQuerySchema>;
