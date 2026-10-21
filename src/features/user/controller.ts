@@ -28,6 +28,7 @@ export const userController = new Elysia({ prefix: "/api/users" }).use(authMiddl
         message: t.String(),
         data: t.Object({
           id: t.String(),
+          name: t.String(),
           phone: t.String(),
           email: t.String(),
           position: t.String(),
@@ -117,6 +118,7 @@ export const protectedUserController = new Elysia({ prefix: "/api/users" })
         message: t.String(),
         data: t.Object({
           id: t.String(),
+          name: t.String(),
           phone: t.String(),
           email: t.String(),
           position: t.String(),

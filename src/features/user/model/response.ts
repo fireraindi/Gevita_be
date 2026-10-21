@@ -1,5 +1,6 @@
 export interface UserResponse {
   id: string;
+  name: string;
   phone: string;
   email: string;
   position: string;
@@ -23,6 +24,7 @@ export interface RegisterUserResponse {
 
 export interface UserDetailData {
   id: string;
+  name: string;
   phone: string;
   email: string;
   position: string;

@@ -69,6 +69,7 @@ export async function createUser(request: RegisterRequest): Promise<UserResponse
       account_number: input.accountNumber,
     }).returning({
       id: users.id,
+      name: users.name,
       phone: users.phone,
       email: users.email,
       position: users.position,
@@ -96,6 +97,7 @@ export async function createUser(request: RegisterRequest): Promise<UserResponse
 export async function getUserById(id: string): Promise<UserDetailData> {
   const [user] = await db.select({
     id: users.id,
+    name: users.name,
     phone: users.phone,
     email: users.email,
     position: users.position,
