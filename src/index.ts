@@ -7,6 +7,7 @@ import { protectedUserController, userController } from "./features/user/control
 import { authController } from "./features/auth/controller";
 import { attendancesController } from "./features/attendances/controller";
 import { leavesController } from "./features/leaves/controller";
+import { jobsController } from "./features/jobs/controller";
 import { seedAdminUser } from "./db/seed-admin";
 
 await seedAdminUser();
@@ -28,6 +29,7 @@ const app = new Elysia()
         { name: "General", description: "Endpoint umum aplikasi." },
         { name: "Attendances", description: "Pencatatan absensi." },
         { name: "Leaves", description: "Pengajuan dan manajemen cuti/izin pengguna." },
+        { name: "Jobs", description: "Pengelolaan job category dan penugasan pekerjaan." },
       ],
       components: {
         securitySchemes: {
@@ -47,6 +49,7 @@ const app = new Elysia()
   .use(authController)
   .use(attendancesController)
   .use(leavesController)
+  .use(jobsController)
   .get("/", () => "Hello Elysia", {
     detail: {
       tags: ["General"],

@@ -3,9 +3,9 @@ import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { db } from "../../db";
 import { users } from "../../db/schema";
-import { changePasswordSchema, createUserSchema, userListQuerySchema } from "./validation";
+import { changePasswordSchema, createUserSchema, updateUserSchema, userListQuerySchema } from "./validation";
 import type { UserResponse } from "./model/response";
-import { RegisterRequest } from "./model/request";
+import type { RegisterRequest, UpdateUserRequest } from "./model/request";
 import { validate } from "../../helpers/validate";
 import { BadRequestError, ConflictError, NotFoundError, PasswordMismatchError } from "../../errors/errors";
 import type { ChangePasswordInput } from "./validation";
@@ -13,6 +13,7 @@ import { getProfilePhotoUrl } from "../../helpers/photo";
 import type { UserDetailData } from "./model/response";
 import type { UserListItemData } from "./model/response";
 import type { UserListQuery } from "./validation";
+import type { UpdateUserData } from "./model/response";
 
 const extensionByType: Record<string, string> = {
   "image/jpeg": "jpg",
@@ -87,6 +88,78 @@ export async function createUser(request: RegisterRequest): Promise<UserResponse
     });
     if (!user) throw new Error("User insert did not return a row");
     return user;
+  } catch (error) {
+    if (storedPhoto) await unlink(storedPhoto.filepath).catch(() => undefined);
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "23505") {
+      throw new ConflictError("(email/phone) already exist");
+    }
+    throw error;
+  }
+}
+
+export async function updateUser(userId: string, request: UpdateUserRequest): Promise<UpdateUserData> {
+  const input = validate(updateUserSchema, request);
+  const [existingUser] = await db.select({ id: users.id })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  if (!existingUser) throw new NotFoundError("User Not found");
+
+  const hashedPassword = input.password ? await Bun.password.hash(input.password) : undefined;
+  let storedPhoto: { filename: string; filepath: string } | null = null;
+  if (input.photo) storedPhoto = await storeProfilePhoto(input.photo);
+
+  const updateData: {
+    name: string;
+    phone: string;
+    email: string;
+    position: string;
+    role: "admin" | "employee";
+    photo?: string;
+    password?: string;
+    salary: number;
+    support_salary: number;
+    overtime_salary: number;
+    pocket_money: number;
+    bank: string;
+    account_number: string;
+    updated_at: Date;
+  } = {
+    name: input.name,
+    phone: input.phone,
+    email: input.email,
+    position: input.position,
+    role: input.role,
+    salary: input.salary,
+    support_salary: input.supportSalary,
+    overtime_salary: input.overtimeSalary,
+    pocket_money: input.pocketMoney,
+    bank: input.bank,
+    account_number: input.accountNumber,
+    updated_at: new Date(),
+  };
+  if (storedPhoto) updateData.photo = storedPhoto.filename;
+  if (hashedPassword) updateData.password = hashedPassword;
+
+  try {
+    const [updatedUser] = await db.update(users).set(updateData).where(eq(users.id, userId)).returning({
+      id: users.id,
+      name: users.name,
+      phone: users.phone,
+      email: users.email,
+      position: users.position,
+      role: users.role,
+      isActive: users.is_active,
+      createdAt: users.created_at,
+      salary: users.salary,
+      supportSalary: users.support_salary,
+      overtimeSalary: users.overtime_salary,
+      pocketMoney: users.pocket_money,
+      bank: users.bank,
+      accountNumber: users.account_number,
+    });
+    if (!updatedUser) throw new NotFoundError("User Not found");
+    return updatedUser;
   } catch (error) {
     if (storedPhoto) await unlink(storedPhoto.filepath).catch(() => undefined);
     if (typeof error === "object" && error !== null && "code" in error && error.code === "23505") {

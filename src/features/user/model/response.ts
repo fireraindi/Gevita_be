@@ -47,6 +47,31 @@ export interface UserDetailResponse {
   data: UserDetailData;
 }
 
+export interface UpdateUserData {
+  id: string;
+  name?: string;
+  phone: string;
+  email: string;
+  position: string;
+  role: "admin" | "employee";
+  isActive: boolean;
+  photo?: string | null;
+  createdAt: Date | string;
+  salary: number;
+  supportSalary: number;
+  overtimeSalary: number;
+  pocketMoney: number;
+  bank: string;
+  accountNumber: string;
+}
+
+export interface UpdateUserResponse {
+  status: "success";
+  statusCode: 200;
+  message: string;
+  data: UpdateUserData;
+}
+
 export interface UserListItemData {
   id: string;
   name: string;

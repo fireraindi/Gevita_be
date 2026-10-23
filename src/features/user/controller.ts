@@ -1,5 +1,5 @@
 import { Elysia, t } from "elysia";
-import { changePassword, createUser, getUserById, getUsers } from "./service";
+import { changePassword, createUser, getUserById, getUsers, updateUser } from "./service";
 import type { RegisterRequest } from "./model/request";
 import type { RegisterUserResponse } from "./model/response";
 import type { UserDetailResponse } from "./model/response";
@@ -7,6 +7,28 @@ import type { UserListResponse } from "./model/response";
 import { authMiddleware } from "../../middleware/auth";
 import { assertAdmin } from "../../helpers/role";
 import type { ChangePasswordInput } from "./validation";
+import type { UpdateUserRequest } from "./model/request";
+import type { UpdateUserResponse } from "./model/response";
+
+const updateUserOpenApiSchema = {
+  type: "object" as const,
+  required: ["name", "phone", "email", "position", "role", "salary", "supportSalary", "overtimeSalary", "pocketMoney", "bank", "accountNumber"] as string[],
+  properties: {
+    name: { type: "string", minLength: 1, maxLength: 100 },
+    phone: { type: "string", pattern: "^\\d{10,20}$" },
+    email: { type: "string", format: "email", minLength: 5, maxLength: 100 },
+    password: { type: "string", minLength: 4, maxLength: 100, pattern: "^\\d+$", description: "Opsional; kosong berarti tidak diubah." },
+    position: { type: "string", minLength: 1, maxLength: 100 },
+    role: { type: "string", enum: ["admin", "employee"] as ["admin", "employee"] },
+    photo: { type: "string", format: "binary", description: "Foto JPG, PNG, atau WebP, maksimal 1 MB." },
+    salary: { type: "integer", minimum: 1 },
+    supportSalary: { type: "integer", minimum: 1 },
+    overtimeSalary: { type: "integer", minimum: 1 },
+    pocketMoney: { type: "integer", minimum: 1 },
+    bank: { type: "string", minLength: 1, maxLength: 100 },
+    accountNumber: { type: "string", minLength: 1, maxLength: 50 },
+  } as const,
+};
 
 export const userController = new Elysia({ prefix: "/api/users" }).use(authMiddleware).post(
   "",
@@ -182,6 +204,42 @@ export const protectedUserController = new Elysia({ prefix: "/api/users" })
       summary: "Get user detail (Admin Only)",
       description: "Mengambil detail profil, payroll, dan rekening pengguna. Hanya admin yang dapat mengakses endpoint ini.",
       security: [{ bearerAuth: [] }],
+    },
+  })
+  .put("/:id", async ({ authUser, params, body }): Promise<UpdateUserResponse> => {
+    assertAdmin(authUser);
+    const user = await updateUser(params.id, body as UpdateUserRequest);
+    return { status: "success", statusCode: 200, message: "Success update user", data: user };
+  }, {
+    params: t.Object({ id: t.String({ description: "User UUID" }) }),
+    response: {
+      200: t.Object({
+        status: t.Literal("success"), statusCode: t.Literal(200), message: t.String(),
+        data: t.Object({
+          id: t.String(), phone: t.String(), email: t.String(), position: t.String(),
+          role: t.Union([t.Literal("admin"), t.Literal("employee")]), isActive: t.Boolean(),
+          createdAt: t.Union([t.Date(), t.String()]), salary: t.Number(), supportSalary: t.Number(),
+          overtimeSalary: t.Number(), pocketMoney: t.Number(), bank: t.String(), accountNumber: t.String(),
+        }),
+      }),
+      400: t.Object({ status: t.Literal("error"), statusCode: t.Literal(400), errors: t.Record(t.String(), t.Array(t.String())) }),
+      401: t.Object({ status: t.Literal("error"), statusCode: t.Literal(401), errors: t.Literal("Unauthorized") }),
+      403: t.Object({ status: t.Literal("error"), statusCode: t.Literal(403), errors: t.Literal("Forbidden") }),
+      404: t.Object({ status: t.Literal("error"), statusCode: t.Literal(404), errors: t.Literal("User Not found") }),
+      409: t.Object({ status: t.Literal("error"), statusCode: t.Literal(409), errors: t.Literal("(email/phone) already exist") }),
+      500: t.Object({ status: t.Literal("error"), statusCode: t.Literal(500), errors: t.Literal("Internal server error") }),
+    },
+    detail: {
+      tags: ["Users"], summary: "Update user (Admin Only)",
+      description: "Memperbarui profil dan payroll pengguna. Password opsional; nilai kosong mempertahankan password lama.",
+      security: [{ bearerAuth: [] }],
+      requestBody: {
+        required: true,
+        content: {
+          "multipart/form-data": { schema: updateUserOpenApiSchema },
+          "application/json": { schema: updateUserOpenApiSchema },
+        },
+      },
     },
   })
   .put("", async ({ body, authUser }) => {

@@ -169,6 +169,74 @@ describe("User API", () => {
     });
   });
 
+  describe("Update user", () => {
+    test("updates user data while keeping the existing password when omitted", async () => {
+      const payload = validUser(namespace);
+      const created = await registerUser(namespace, payload);
+      const update = { ...payload, password: undefined, name: "Updated User" };
+      const { response, body } = await requestJson(`/api/users/${created.body.data.id}`, "PUT", update, adminToken);
+      expect(response.status).toBe(200);
+      expect(body.message).toBe("Success update user");
+      expect(body.data.name).toBe("Updated User");
+      expect((await loginUser(payload.email, payload.password)).response.status).toBe(200);
+    });
+
+    test("updates password only when a numeric password is provided", async () => {
+      const payload = validUser(namespace);
+      const created = await registerUser(namespace, payload);
+      const { response } = await requestJson(`/api/users/${created.body.data.id}`, "PUT", { ...payload, password: "9999" }, adminToken);
+      expect(response.status).toBe(200);
+      expect((await loginUser(payload.email, payload.password)).response.status).toBe(401);
+      expect((await loginUser(payload.email, "9999")).response.status).toBe(200);
+    });
+
+    test("rejects employees and unauthenticated requests", async () => {
+      const payload = validUser(namespace);
+      const created = await registerUser(namespace, payload);
+      const employeeToken = jwt.sign({ id: created.body.data.id, role: "employee" }, String(process.env.JWT_SECRET));
+      const employee = await requestJson(`/api/users/${created.body.data.id}`, "PUT", payload, employeeToken);
+      expect(employee.response.status).toBe(403);
+      expect(employee.body.errors).toBe("Forbidden");
+      const unauthenticated = await requestJson(`/api/users/${created.body.data.id}`, "PUT", payload);
+      expect(unauthenticated.response.status).toBe(401);
+      expect(unauthenticated.body.errors).toBe("Unauthorized");
+    });
+
+    test("returns not found, conflict, and validation errors", async () => {
+      const first = validUser(namespace);
+      const second = validUser(namespace);
+      const createdFirst = await registerUser(namespace, first);
+      await registerUser(namespace, second);
+
+      const missing = await requestJson(`/api/users/${crypto.randomUUID()}`, "PUT", first, adminToken);
+      expect(missing.response.status).toBe(404);
+      expect(missing.body.errors).toBe("User Not found");
+
+      const duplicate = await requestJson(`/api/users/${createdFirst.body.data.id}`, "PUT", { ...first, email: second.email }, adminToken);
+      expect(duplicate.response.status).toBe(409);
+      expect(duplicate.body.errors).toBe("(email/phone) already exist");
+
+      const invalid = await requestJson(`/api/users/${createdFirst.body.data.id}`, "PUT", { ...first, password: "abcd", salary: -1 }, adminToken);
+      expect(invalid.response.status).toBe(400);
+      expect(invalid.body.errors).toHaveProperty("password");
+      expect(invalid.body.errors).toHaveProperty("salary");
+    });
+
+    test("uploads a replacement profile photo", async () => {
+      const payload = validUser(namespace);
+      const created = await registerUser(namespace, payload);
+      const form = new FormData();
+      Object.entries({ ...payload, password: "" }).forEach(([key, value]) => form.set(key, String(value)));
+      form.set("photo", new File([new Uint8Array([1, 2, 3])], "avatar.png", { type: "image/png" }));
+      const { response, body } = await requestForm(`/api/users/${created.body.data.id}`, "PUT", form, adminToken);
+      expect(response.status).toBe(200);
+      const [user] = await testDb.select({ photo: testUsers.photo }).from(testUsers).where(eq(testUsers.id, created.body.data.id));
+      expect(user?.photo).toMatch(/\.png$/);
+      if (user?.photo) trackTestUpload(namespace, join(process.cwd(), "uploads", "profile", user.photo));
+      expect(body.data.email).toBe(payload.email);
+    });
+  });
+
   describe("User detail", () => {
     test("returns the user's detail for an admin", async () => {
       const payload = validUser(namespace);

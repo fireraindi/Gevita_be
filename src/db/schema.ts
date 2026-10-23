@@ -51,3 +51,13 @@ export const attendances = pgTable("attendances", {
   updated_at: timestamp("updated_at").defaultNow().notNull(),
   deleted_at: timestamp("deleted_at"),
 }, (table) => [unique("attendances_user_id_date_unique").on(table.user_id, table.date)]);
+
+export const jobs = pgTable("jobs", {
+  id: serial("id").primaryKey(),
+  user_id: varchar("user_id", { length: 255 }).references(() => users.id).notNull(),
+  name: varchar("name", { length: 100 }).notNull(),
+  salary: integer("salary").notNull(),
+  created_at: timestamp("created_at").defaultNow().notNull(),
+  updated_at: timestamp("updated_at").defaultNow().notNull(),
+  deleted_at: timestamp("deleted_at"),
+});
