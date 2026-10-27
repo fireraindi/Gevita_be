@@ -1,11 +1,66 @@
 import { Elysia, t } from "elysia";
 import { authMiddleware } from "../../middleware/auth";
-import { checkIn, checkOut, getAttendanceHistory, getAttendanceStats, getTodayAttendance } from "./service";
-import type { AttendanceHistoryQueryInput, CheckInRequest } from "./model/request";
-import type { AttendanceHistoryResponse, AttendanceStatsResponse, CheckInResponse, CheckOutResponse } from "./model/response";
+import { checkIn, checkOut, getAttendanceHistory, getAttendanceStats, getTodayAttendance, listAttendances } from "./service";
+import type { AttendanceHistoryQueryInput, CheckInRequest, ListAttendancesQueryInput } from "./model/request";
+import type { AttendanceHistoryResponse, AttendanceStatsResponse, CheckInResponse, CheckOutResponse, ListAttendancesResponse } from "./model/response";
 
 export const attendancesController = new Elysia({ prefix: "/api/attendances" })
   .use(authMiddleware)
+  .get("", async ({ authUser, query }): Promise<ListAttendancesResponse> => {
+    const result = await listAttendances(authUser, query as ListAttendancesQueryInput);
+    return {
+      status: "success",
+      message: "Success get attendances",
+      data: result.data,
+      pagination: result.pagination,
+    };
+  }, {
+    response: {
+      200: t.Object({
+        status: t.Literal("success"),
+        message: t.Literal("Success get attendances"),
+        data: t.Array(t.Object({
+          id: t.Number(),
+          userId: t.String(),
+          name: t.String(),
+          date: t.String(),
+          checkInTime: t.String(),
+          checkOutTime: t.Nullable(t.String()),
+          status: t.Union([
+            t.Literal("Hadir"), t.Literal("Terlambat"), t.Literal("Tidak Hadir"),
+            t.Literal("Sakit"), t.Literal("Izin"), t.Literal("Dinas"),
+          ]),
+        })),
+        pagination: t.Object({
+          page: t.Number(),
+          limit: t.Number(),
+          total: t.Number(),
+          total_pages: t.Number(),
+        }),
+      }),
+      400: t.Object({
+        status: t.Literal("error"),
+        statusCode: t.Literal(400),
+        errors: t.Union([t.Record(t.String(), t.Array(t.String())), t.String()]),
+      }),
+      401: t.Object({ status: t.Literal("error"), statusCode: t.Literal(401), errors: t.Literal("Unauthorized") }),
+      403: t.Object({ status: t.Literal("error"), statusCode: t.Literal(403), errors: t.String() }),
+      500: t.Object({ status: t.Literal("error"), statusCode: t.Literal(500), errors: t.Literal("Internal server error") }),
+    },
+    detail: {
+      tags: ["Attendances"],
+      summary: "Get list attendances (Admin Only)",
+      description: "Mengambil daftar kehadiran karyawan dengan filter status, rentang tanggal maksimal 60 hari, dan pagination. Hanya dapat diakses oleh admin aktif.",
+      security: [{ bearerAuth: [] }],
+      parameters: [
+        { in: "query", name: "status", required: false, schema: { type: "string", enum: ["Hadir", "Terlambat", "Tidak Hadir", "Sakit", "Izin", "Dinas"] } },
+        { in: "query", name: "start_date", required: false, description: "Batas awal inklusif (YYYY-MM-DD); wajib disertai end_date.", schema: { type: "string", format: "date" } },
+        { in: "query", name: "end_date", required: false, description: "Batas akhir inklusif (YYYY-MM-DD); rentang maksimal 60 hari.", schema: { type: "string", format: "date" } },
+        { in: "query", name: "limit", required: false, schema: { type: "integer", minimum: 1, maximum: 100, default: 20 } },
+        { in: "query", name: "page", required: false, schema: { type: "integer", minimum: 1, default: 1 } },
+      ],
+    },
+  })
   .get("/stats", async ({ authUser }): Promise<AttendanceStatsResponse> => ({
     status: "success",
     statusCode: 200,

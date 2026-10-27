@@ -71,3 +71,29 @@ export interface AttendanceStatsResponse {
   message: "Success get stats attendance";
   data: AttendanceStatsData;
 }
+
+export type AttendanceListStatus = "Hadir" | "Terlambat" | "Tidak Hadir" | "Sakit" | "Izin" | "Dinas";
+
+export interface AttendanceListItem {
+  id: number;
+  userId: string;
+  name: string;
+  date: string;
+  checkInTime: string;
+  checkOutTime: string | null;
+  status: AttendanceListStatus;
+}
+
+export interface PaginationData {
+  page: number;
+  limit: number;
+  total: number;
+  total_pages: number;
+}
+
+export interface ListAttendancesResponse {
+  status: "success";
+  message: "Success get attendances";
+  data: AttendanceListItem[];
+  pagination: PaginationData;
+}

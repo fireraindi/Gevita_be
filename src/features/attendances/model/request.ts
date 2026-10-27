@@ -8,3 +8,11 @@ export interface AttendanceHistoryQueryInput {
   limit?: number;
   desc?: string | boolean;
 }
+
+export interface ListAttendancesQueryInput {
+  status?: string;
+  start_date?: string;
+  end_date?: string;
+  limit?: string | number;
+  page?: string | number;
+}

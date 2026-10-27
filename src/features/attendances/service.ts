@@ -1,14 +1,14 @@
-import { and, asc, count, desc, eq, gte, isNull, lt } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, isNull, lt, lte } from "drizzle-orm";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { db } from "../../db";
-import { attendances, leaves } from "../../db/schema";
-import { ConflictError } from "../../errors/errors";
+import { attendances, leaves, users } from "../../db/schema";
+import { ConflictError, ForbiddenError } from "../../errors/errors";
 import { validate } from "../../helpers/validate";
 import { getCheckInPhotoUrl } from "../../helpers/photo";
-import type { AttendanceHistoryQueryInput, CheckInRequest } from "./model/request";
-import type { AttendanceHistoryItem, AttendanceStatsData, CheckInAttendanceData, CheckOutAttendanceData, TodayAttendanceData } from "./model/response";
-import { attendanceHistoryQuerySchema, checkInSchema } from "./validation";
+import type { AttendanceHistoryQueryInput, CheckInRequest, ListAttendancesQueryInput } from "./model/request";
+import type { AttendanceHistoryItem, AttendanceListItem, AttendanceStatsData, CheckInAttendanceData, CheckOutAttendanceData, PaginationData, TodayAttendanceData } from "./model/response";
+import { attendanceHistoryQuerySchema, checkInSchema, listAttendancesQuerySchema } from "./validation";
 
 const attendanceTimeZone = "Asia/Jakarta";
 let lastPhotoTimestamp = 0;
@@ -97,6 +97,72 @@ export function formatTimeOnly(date: Date | null): string | null {
   }).formatToParts(date);
   const part = (type: string) => parts.find((item) => item.type === type)?.value ?? "00";
   return `${part("hour")}:${part("minute")}:${part("second")}`;
+}
+
+export function getDefaultInclusiveMonthRange(now: Date = new Date()): { startDate: string; endDate: string } {
+  const [year, month] = getCurrentDate(now).split("-").map(Number);
+  const monthText = String(month).padStart(2, "0");
+  const lastDay = new Date(Date.UTC(year!, month!, 0)).getUTCDate();
+  return {
+    startDate: `${year}-${monthText}-01`,
+    endDate: `${year}-${monthText}-${String(lastDay).padStart(2, "0")}`,
+  };
+}
+
+export async function listAttendances(
+  currentUser: { id: string; role: "admin" | "employee" },
+  queryInput: ListAttendancesQueryInput,
+): Promise<{ data: AttendanceListItem[]; pagination: PaginationData }> {
+  const [account] = await db.select({ role: users.role, isActive: users.is_active })
+    .from(users)
+    .where(eq(users.id, currentUser.id))
+    .limit(1);
+  if (!account?.isActive) throw new ForbiddenError("User account is inactive");
+  if (currentUser.role !== "admin" || account.role !== "admin") throw new ForbiddenError("Forbidden");
+
+  const query = validate(listAttendancesQuerySchema, queryInput);
+  const defaultRange = getDefaultInclusiveMonthRange();
+  const startDate = query.start_date ?? defaultRange.startDate;
+  const endDate = query.end_date ?? defaultRange.endDate;
+  const conditions = [
+    isNull(attendances.deleted_at),
+    gte(attendances.date, startDate),
+    lte(attendances.date, endDate),
+  ];
+  if (query.status) conditions.push(eq(attendances.status, query.status));
+  const whereClause = and(...conditions);
+  const [countRow] = await db.select({ total: count() }).from(attendances).where(whereClause);
+  const total = Number(countRow?.total ?? 0);
+  const page = query.page;
+  const limit = query.limit;
+  const rows = await db.select({
+    id: attendances.id,
+    userId: attendances.user_id,
+    name: users.name,
+    date: attendances.date,
+    checkInTime: attendances.check_in_time,
+    checkOutTime: attendances.check_out_time,
+    status: attendances.status,
+  })
+    .from(attendances)
+    .innerJoin(users, eq(attendances.user_id, users.id))
+    .where(whereClause)
+    .orderBy(desc(attendances.date), desc(attendances.id))
+    .limit(limit)
+    .offset((page - 1) * limit);
+
+  return {
+    data: rows.map((row) => ({
+      id: row.id,
+      userId: row.userId,
+      name: row.name,
+      date: row.date,
+      checkInTime: formatTimeOnly(row.checkInTime) ?? "00:00:00",
+      checkOutTime: formatTimeOnly(row.checkOutTime),
+      status: row.status,
+    })),
+    pagination: { page, limit, total, total_pages: total === 0 ? 0 : Math.ceil(total / limit) },
+  };
 }
 
 export async function findAttendanceByUserIdAndDate(userId: string, date: string) {

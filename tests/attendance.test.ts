@@ -3,15 +3,20 @@ import { join } from "node:path";
 import {
   createUserAndLogin,
   eq,
+  loginUser,
+  registerUser,
   testDb,
   testAttendances,
   testLeaves,
+  testUsers,
   isolateApiNamespace,
   requestForm,
   requestJson,
   trackTestUpload,
+  validUser,
   verifyToken,
 } from "./helpers/apiTestHelpers";
+import type { AttendanceListStatus } from "../src/features/attendances/model/response";
 
 const namespace = "attendance-suite";
 
@@ -45,9 +50,18 @@ describe("Attendance API", () => {
       check_in_time: new Date(`${date}T01:02:03.000Z`),
       check_out_time: new Date(`${date}T09:10:11.000Z`),
       check_in_photo: photo,
-      status: status as "Hadir" | "Terlambat",
+      status: status as AttendanceListStatus,
     }).returning({ id: testAttendances.id });
     return { ...attendance, photo };
+  }
+
+  async function createAdminAndLogin() {
+    const payload = validUser(namespace, { role: "admin" });
+    const registration = await registerUser(namespace, payload);
+    expect(registration.response.status).toBe(201);
+    const login = await loginUser(payload.email, payload.password);
+    expect(login.response.status).toBe(200);
+    return { payload, token: login.body.data.token as string };
   }
 
   test("checks in with a valid photo and stores its upload", async () => {
@@ -72,6 +86,104 @@ describe("Attendance API", () => {
     const { response, body } = await checkInAndTrackPhoto(token);
     expect(response.status).toBe(200);
     expect(body.data.status).toBe("Terlambat");
+  });
+
+  test("lists current-month attendances for an active admin with formatted times", async () => {
+    // I have nothing but my burger and I want nothing more
+    setSystemTime(new Date("2026-10-27T05:00:00.000Z"));
+    const employee = await createUserAndLogin(namespace);
+    const userId = verifyToken(employee.token).id;
+    const october = await seedAttendance(userId, "2026-10-15", "Hadir");
+    await seedAttendance(userId, "2026-09-30", "Hadir");
+    const admin = await createAdminAndLogin();
+
+    const { response, body } = await requestJson("/api/attendances", "GET", undefined, admin.token);
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({ status: "success", message: "Success get attendances" });
+    expect(body.pagination).toMatchObject({ page: 1, limit: 20, total: 1, total_pages: 1 });
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0]).toMatchObject({
+      id: october.id,
+      userId,
+      name: employee.payload.name,
+      date: "2026-10-15",
+      checkInTime: "08:02:03",
+      checkOutTime: "16:10:11",
+      status: "Hadir",
+    });
+  });
+
+  test("requires authentication and denies employees and inactive admins", async () => {
+    const unauthorized = await requestJson("/api/attendances", "GET");
+    expect(unauthorized.response.status).toBe(401);
+    expect(unauthorized.body.errors).toBe("Unauthorized");
+
+    const employee = await createUserAndLogin(namespace);
+    const denied = await requestJson("/api/attendances", "GET", undefined, employee.token);
+    expect(denied.response.status).toBe(403);
+    expect(denied.body.errors).toBe("Forbidden");
+
+    const admin = await createAdminAndLogin();
+    const adminId = verifyToken(admin.token).id;
+    await testDb.update(testUsers).set({ is_active: false }).where(eq(testUsers.id, adminId));
+    const inactive = await requestJson("/api/attendances", "GET", undefined, admin.token);
+    expect(inactive.response.status).toBe(403);
+    expect(inactive.body.errors).toBe("User account is inactive");
+  });
+
+  test("filters by status and inclusive date range, then paginates newest first", async () => {
+    const employee = await createUserAndLogin(namespace);
+    const userId = verifyToken(employee.token).id;
+    await seedAttendance(userId, "2026-09-10", "Hadir");
+    await seedAttendance(userId, "2026-09-15", "Terlambat");
+    await seedAttendance(userId, "2026-09-20", "Terlambat");
+    await seedAttendance(userId, "2026-09-21", "Hadir");
+    const admin = await createAdminAndLogin();
+
+    const filtered = await requestJson("/api/attendances?status=Terlambat&start_date=2026-09-15&end_date=2026-09-20", "GET", undefined, admin.token);
+    expect(filtered.response.status).toBe(200);
+    expect(filtered.body.data.map((row: { date: string }) => row.date)).toEqual(["2026-09-20", "2026-09-15"]);
+    expect(filtered.body.data.every((row: { status: string }) => row.status === "Terlambat")).toBe(true);
+
+    const page = await requestJson("/api/attendances?start_date=2026-09-10&end_date=2026-09-21&limit=2&page=2", "GET", undefined, admin.token);
+    expect(page.response.status).toBe(200);
+    expect(page.body.pagination).toMatchObject({ page: 2, limit: 2, total: 4, total_pages: 2 });
+    expect(page.body.data.map((row: { date: string }) => row.date)).toEqual(["2026-09-15", "2026-09-10"]);
+  });
+
+  test.each([
+    ["invalid status", "status=Unknown", "status"],
+    ["bad calendar date", "start_date=2026-02-30&end_date=2026-03-01", "start_date"],
+    ["missing end date", "start_date=2026-10-01", "end_date"],
+    ["reversed date range", "start_date=2026-10-20&end_date=2026-10-10", "end_date"],
+    ["range over 60 days", "start_date=2026-01-01&end_date=2026-04-01", "end_date"],
+    ["zero limit", "limit=0", "limit"],
+    ["limit over 100", "limit=101", "limit"],
+    ["invalid page", "page=-1", "page"],
+  ] as const)("rejects %s query parameters", async (_case, query) => {
+    const admin = await createAdminAndLogin();
+    const { response, body } = await requestJson(`/api/attendances?${query}`, "GET", undefined, admin.token);
+    expect(response.status).toBe(400);
+    expect(body.status).toBe("error");
+    expect(Object.keys(body.errors).length).toBeGreaterThan(0);
+  });
+
+  test("allows a one-day range and excludes soft-deleted attendance", async () => {
+    const employee = await createUserAndLogin(namespace);
+    const userId = verifyToken(employee.token).id;
+    const visible = await seedAttendance(userId, "2026-10-07", "Hadir");
+    const deleted = await seedAttendance(userId, "2026-10-08", "Terlambat");
+    await testDb.update(testAttendances).set({ deleted_at: new Date() }).where(eq(testAttendances.id, deleted.id));
+    const admin = await createAdminAndLogin();
+
+    const oneDay = await requestJson("/api/attendances?start_date=2026-10-07&end_date=2026-10-07", "GET", undefined, admin.token);
+    expect(oneDay.response.status).toBe(200);
+    expect(oneDay.body.data).toHaveLength(1);
+
+    const { response, body } = await requestJson("/api/attendances?start_date=2026-10-07&end_date=2026-10-08", "GET", undefined, admin.token);
+    expect(response.status).toBe(200);
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0].id).toBe(visible.id);
   });
 
   test("rejects check-in without a token", async () => {
