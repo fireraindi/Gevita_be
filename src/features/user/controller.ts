@@ -12,8 +12,9 @@ import type { UpdateUserResponse } from "./model/response";
 
 const updateUserOpenApiSchema = {
   type: "object" as const,
-  required: ["name", "phone", "email", "position", "role", "salary", "supportSalary", "overtimeSalary", "pocketMoney", "bank", "accountNumber"] as string[],
+  required: [] as string[],
   properties: {
+    isActive: { type: "boolean", description: "Status aktif akun pengguna." },
     name: { type: "string", minLength: 1, maxLength: 100 },
     phone: { type: "string", pattern: "^\\d{10,20}$" },
     email: { type: "string", format: "email", minLength: 5, maxLength: 100 },
@@ -206,7 +207,7 @@ export const protectedUserController = new Elysia({ prefix: "/api/users" })
       security: [{ bearerAuth: [] }],
     },
   })
-  .put("/:id", async ({ authUser, params, body }): Promise<UpdateUserResponse> => {
+  .patch("/:id", async ({ authUser, params, body }): Promise<UpdateUserResponse> => {
     assertAdmin(authUser);
     const user = await updateUser(params.id, body as UpdateUserRequest);
     return { status: "success", statusCode: 200, message: "Success update user", data: user };
@@ -231,7 +232,7 @@ export const protectedUserController = new Elysia({ prefix: "/api/users" })
     },
     detail: {
       tags: ["Users"], summary: "Update user (Admin Only)",
-      description: "Memperbarui profil dan payroll pengguna. Password opsional; nilai kosong mempertahankan password lama.",
+      description: "Memperbarui field pengguna yang dikirim, termasuk status aktif. Password opsional; nilai kosong mempertahankan password lama.",
       security: [{ bearerAuth: [] }],
       requestBody: {
         required: true,

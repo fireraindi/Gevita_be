@@ -109,35 +109,19 @@ export async function updateUser(userId: string, request: UpdateUserRequest): Pr
   let storedPhoto: { filename: string; filepath: string } | null = null;
   if (input.photo) storedPhoto = await storeProfilePhoto(input.photo);
 
-  const updateData: {
-    name: string;
-    phone: string;
-    email: string;
-    position: string;
-    role: "admin" | "employee";
-    photo?: string;
-    password?: string;
-    salary: number;
-    support_salary: number;
-    overtime_salary: number;
-    pocket_money: number;
-    bank: string;
-    account_number: string;
-    updated_at: Date;
-  } = {
-    name: input.name,
-    phone: input.phone,
-    email: input.email,
-    position: input.position,
-    role: input.role,
-    salary: input.salary,
-    support_salary: input.supportSalary,
-    overtime_salary: input.overtimeSalary,
-    pocket_money: input.pocketMoney,
-    bank: input.bank,
-    account_number: input.accountNumber,
-    updated_at: new Date(),
-  };
+  const updateData: Partial<typeof users.$inferInsert> = { updated_at: new Date() };
+  if (input.isActive !== undefined) updateData.is_active = input.isActive;
+  if (input.name !== undefined) updateData.name = input.name;
+  if (input.phone !== undefined) updateData.phone = input.phone;
+  if (input.email !== undefined) updateData.email = input.email;
+  if (input.position !== undefined) updateData.position = input.position;
+  if (input.role !== undefined) updateData.role = input.role;
+  if (input.salary !== undefined) updateData.salary = input.salary;
+  if (input.supportSalary !== undefined) updateData.support_salary = input.supportSalary;
+  if (input.overtimeSalary !== undefined) updateData.overtime_salary = input.overtimeSalary;
+  if (input.pocketMoney !== undefined) updateData.pocket_money = input.pocketMoney;
+  if (input.bank !== undefined) updateData.bank = input.bank;
+  if (input.accountNumber !== undefined) updateData.account_number = input.accountNumber;
   if (storedPhoto) updateData.photo = storedPhoto.filename;
   if (hashedPassword) updateData.password = hashedPassword;
 

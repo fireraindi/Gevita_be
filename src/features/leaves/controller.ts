@@ -1,8 +1,8 @@
 import { Elysia, t } from "elysia";
 import { authMiddleware } from "../../middleware/auth";
 import type { CreateLeaveRequest } from "./model/request";
-import type { CreateLeaveSuccessResponse, LeaveDetailResponse, LeaveHistoryResponse } from "./model/response";
-import { createLeave, getLeaveDetail, getLeaveHistory } from "./service";
+import type { ApproveLeaveStatusResponse, CreateLeaveSuccessResponse, LeaveDetailResponse, LeaveHistoryResponse, RejectLeaveStatusResponse } from "./model/response";
+import { approveLeave, createLeave, getLeaveDetail, getLeaveHistory, rejectLeave } from "./service";
 import type { LeaveHistoryQuery } from "./validation";
 
 export const leavesController = new Elysia({ prefix: "/api/leaves" })
@@ -16,6 +16,7 @@ export const leavesController = new Elysia({ prefix: "/api/leaves" })
         status: t.Literal("success"),
         data: t.Array(t.Object({
           id: t.Number(), startDate: t.String(), endDate: t.String(), reason: t.String(),
+          category: t.Union([t.Literal("Sakit"), t.Literal("Izin")]),
           status: t.Union([t.Literal("Pending"), t.Literal("Approved"), t.Literal("Rejected")]),
           image: t.Nullable(t.String()), created_at: t.String(),
         })),
@@ -50,6 +51,7 @@ export const leavesController = new Elysia({ prefix: "/api/leaves" })
           start_date: t.String(),
           end_date: t.String(),
           reason: t.String(),
+          category: t.Union([t.Literal("Sakit"), t.Literal("Izin")]),
           status: t.Union([t.Literal("Pending"), t.Literal("Approved"), t.Literal("Rejected")]),
           image: t.Nullable(t.String()),
           created_at: t.String(),
@@ -92,6 +94,7 @@ export const leavesController = new Elysia({ prefix: "/api/leaves" })
           startDate: t.String(),
           endDate: t.String(),
           reason: t.String(),
+          category: t.Union([t.Literal("Sakit"), t.Literal("Izin")]),
           status: t.Literal("Pending"),
           image: t.Nullable(t.String()),
           created_at: t.String(),
@@ -128,4 +131,40 @@ export const leavesController = new Elysia({ prefix: "/api/leaves" })
         } } },
       },
     },
+  })
+  .patch("/:id/rejected", async ({ authUser, params }): Promise<RejectLeaveStatusResponse> => ({
+    status: "success",
+    data: await rejectLeave(authUser, Number(params.id)),
+  }), {
+    params: t.Object({ id: t.Numeric({ minimum: 1, error: "Leave ID must be a positive integer" }) }),
+    response: {
+      200: t.Object({ status: t.Literal("success"), data: t.Object({
+        id: t.Number(), startDate: t.String(), endDate: t.String(),
+        category: t.Union([t.Literal("Sakit"), t.Literal("Izin")]), status: t.Literal("Rejected"),
+      }) }),
+      400: t.Object({ status: t.Literal("error"), statusCode: t.Literal(400), errors: t.String() }),
+      401: t.Object({ status: t.Literal("error"), statusCode: t.Literal(401), errors: t.Literal("Unauthorized") }),
+      403: t.Object({ status: t.Literal("error"), statusCode: t.Literal(403), errors: t.Literal("Forbidden") }),
+      404: t.Object({ status: t.Literal("error"), statusCode: t.Literal(404), errors: t.Literal("Leave not found") }),
+      500: t.Object({ status: t.Literal("error"), statusCode: t.Literal(500), errors: t.Literal("Internal server error") }),
+    },
+    detail: { tags: ["Leaves"], summary: "Reject leave request", security: [{ bearerAuth: [] }] },
+  })
+  .patch("/:id/approved", async ({ authUser, params }): Promise<ApproveLeaveStatusResponse> => ({
+    status: "success",
+    data: await approveLeave(authUser, Number(params.id)),
+  }), {
+    params: t.Object({ id: t.Numeric({ minimum: 1, error: "Leave ID must be a positive integer" }) }),
+    response: {
+      200: t.Object({ status: t.Literal("success"), data: t.Object({
+        id: t.Number(), startDate: t.String(), endDate: t.String(),
+        category: t.Union([t.Literal("Sakit"), t.Literal("Izin")]), status: t.Literal("Approved"),
+      }) }),
+      400: t.Object({ status: t.Literal("error"), statusCode: t.Literal(400), errors: t.String() }),
+      401: t.Object({ status: t.Literal("error"), statusCode: t.Literal(401), errors: t.Literal("Unauthorized") }),
+      403: t.Object({ status: t.Literal("error"), statusCode: t.Literal(403), errors: t.Literal("Forbidden") }),
+      404: t.Object({ status: t.Literal("error"), statusCode: t.Literal(404), errors: t.Literal("Leave not found") }),
+      500: t.Object({ status: t.Literal("error"), statusCode: t.Literal(500), errors: t.Literal("Internal server error") }),
+    },
+    detail: { tags: ["Leaves"], summary: "Approve leave request", security: [{ bearerAuth: [] }] },
   });

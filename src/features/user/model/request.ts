@@ -15,17 +15,18 @@ export interface RegisterRequest {
 }
 
 export interface UpdateUserRequest {
-  name: string;
-  phone: string;
-  email: string;
+  isActive?: boolean;
+  name?: string;
+  phone?: string;
+  email?: string;
   password?: string;
-  position: string;
-  role: "admin" | "employee";
+  position?: string;
+  role?: "admin" | "employee";
   photo?: File;
-  salary: number;
-  supportSalary: number;
-  overtimeSalary: number;
-  pocketMoney: number;
-  bank: string;
-  accountNumber: string;
+  salary?: number;
+  supportSalary?: number;
+  overtimeSalary?: number;
+  pocketMoney?: number;
+  bank?: string;
+  accountNumber?: string;
 }

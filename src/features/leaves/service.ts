@@ -2,14 +2,14 @@ import { and, desc, eq, gte, isNull, lt } from "drizzle-orm";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { db } from "../../db";
-import { leaves } from "../../db/schema";
-import { ForbiddenError, NotFoundError } from "../../errors/errors";
+import { attendances, leaves } from "../../db/schema";
+import { BadRequestError, ForbiddenError, NotFoundError } from "../../errors/errors";
 import { getLeavePhotoUrl } from "../../helpers/photo";
 import { validate } from "../../helpers/validate";
 import { createLeaveSchema, leaveHistoryQuerySchema, leaveIdParamSchema } from "./validation";
 import type { LeaveHistoryQuery } from "./validation";
 import type { CreateLeaveRequest } from "./model/request";
-import type { LeaveDetailData, LeaveResponseData } from "./model/response";
+import type { LeaveDetailData, LeaveResponseData, UpdateLeaveStatusData } from "./model/response";
 
 let lastLeaveImageTimestamp = 0;
 
@@ -33,6 +33,7 @@ export async function insertLeaveRecord(values: {
     startDate: leaves.start_date,
     endDate: leaves.end_date,
     reason: leaves.reason,
+    category: leaves.category,
     status: leaves.status,
     image: leaves.image,
     createdAt: leaves.created_at,
@@ -43,6 +44,7 @@ export async function insertLeaveRecord(values: {
     startDate: row.startDate,
     endDate: row.endDate,
     reason: row.reason,
+    category: row.category,
     status: row.status,
     image: row.image,
     created_at: row.createdAt.toISOString(),
@@ -120,6 +122,7 @@ export async function getLeaveHistory(userId: string, query: LeaveHistoryQuery):
     startDate: row.start_date,
     endDate: row.end_date,
     reason: row.reason,
+    category: row.category,
     status: row.status,
     image: getLeavePhotoUrl(row.image),
     created_at: row.created_at.toISOString(),
@@ -145,9 +148,68 @@ export async function getLeaveDetail(
     start_date: leave.start_date,
     end_date: leave.end_date,
     reason: leave.reason,
+    category: leave.category,
     status: leave.status,
     image: getLeavePhotoUrl(leave.image),
     created_at: leave.created_at.toISOString(),
     updated_at: leave.updated_at.toISOString(),
   };
+}
+
+function getDateRange(startDate: string, endDate: string): string[] {
+  const dates: string[] = [];
+  const current = new Date(`${startDate}T00:00:00Z`);
+  const end = new Date(`${endDate}T00:00:00Z`);
+  while (current <= end) {
+    dates.push(current.toISOString().slice(0, 10));
+    current.setUTCDate(current.getUTCDate() + 1);
+  }
+  return dates;
+}
+
+async function getPendingLeave(leaveId: number) {
+  const input = validate(leaveIdParamSchema, { id: leaveId });
+  const [leave] = await db.select().from(leaves)
+    .where(and(eq(leaves.id, input.id), isNull(leaves.deleted_at)))
+    .limit(1);
+  if (!leave) throw new NotFoundError("Leave not found");
+  if (leave.status !== "Pending") throw new BadRequestError("Leave already processed");
+  return leave;
+}
+
+export async function rejectLeave(
+  currentUser: { id: string; role: "admin" | "employee" },
+  leaveId: number,
+): Promise<UpdateLeaveStatusData & { status: "Rejected" }> {
+  if (currentUser.role !== "admin") throw new ForbiddenError("Forbidden");
+  const leave = await getPendingLeave(leaveId);
+  const [updated] = await db.update(leaves)
+    .set({ status: "Rejected", updated_at: new Date() })
+    .where(and(eq(leaves.id, leave.id), eq(leaves.status, "Pending"), isNull(leaves.deleted_at)))
+    .returning({ id: leaves.id, startDate: leaves.start_date, endDate: leaves.end_date, category: leaves.category, status: leaves.status });
+  if (!updated) throw new BadRequestError("Leave already processed");
+  return { ...updated, status: "Rejected" };
+}
+
+export async function approveLeave(
+  currentUser: { id: string; role: "admin" | "employee" },
+  leaveId: number,
+): Promise<UpdateLeaveStatusData & { status: "Approved" }> {
+  if (currentUser.role !== "admin") throw new ForbiddenError("Forbidden");
+  const leave = await getPendingLeave(leaveId);
+  return db.transaction(async (tx) => {
+    const [updated] = await tx.update(leaves)
+      .set({ status: "Approved", updated_at: new Date() })
+      .where(and(eq(leaves.id, leave.id), eq(leaves.status, "Pending"), isNull(leaves.deleted_at)))
+      .returning({ id: leaves.id, startDate: leaves.start_date, endDate: leaves.end_date, category: leaves.category, status: leaves.status });
+    if (!updated) throw new BadRequestError("Leave already processed");
+    await tx.insert(attendances).values(getDateRange(leave.start_date, leave.end_date).map((date) => ({
+      user_id: leave.user_id,
+      date,
+      check_in_time: new Date(`${date}T00:00:00Z`),
+      check_in_photo: "leave.webp",
+      status: leave.category,
+    })));
+    return { ...updated, status: "Approved" };
+  });
 }

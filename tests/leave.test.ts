@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import { createUserAndLogin, eq, testDb, testLeaves, isolateApiNamespace, requestForm, requestJson, registerUser, loginUser, validUser, trackTestUpload, verifyToken } from "./helpers/apiTestHelpers";
+import { adminToken, createUserAndLogin, eq, inArray, testAttendances, testDb, testLeaves, isolateApiNamespace, requestForm, requestJson, registerUser, loginUser, validUser, trackTestUpload, verifyToken } from "./helpers/apiTestHelpers";
 
 const namespace = "leave-suite";
 
@@ -27,6 +27,7 @@ describe("Leave API", () => {
     const { response, body } = await requestForm("/api/leaves", "POST", validForm(), token);
     expect(response.status).toBe(201);
     expect(body.data.status).toBe("Pending");
+    expect(body.data.category).toBe("Izin");
     expect(body.data.image).toBeNull();
     expect(body.data.startDate).toBe("2026-11-01");
     const [row] = await testDb.select().from(testLeaves).where(eq(testLeaves.id, body.data.id));
@@ -107,6 +108,7 @@ describe("Leave API", () => {
         start_date: "2026-11-01",
         end_date: "2026-11-03",
         reason: "Acara keluarga",
+        category: "Izin",
         status: "Pending",
         image: null,
       });
@@ -141,5 +143,57 @@ describe("Leave API", () => {
       expect(response.response.status).toBe(200);
       expect(response.body.data.image).toMatch(/^http:\/\/localhost:3000\/uploads\/leave\//);
     });
+  });
+
+  test("reject endpoint requires an admin and rejects a pending leave", async () => {
+    const employee = await createUserAndLogin(namespace);
+    const created = await requestForm("/api/leaves", "POST", validForm(), employee.token);
+    const denied = await requestJson(`/api/leaves/${created.body.data.id}/rejected`, "PATCH", undefined, employee.token);
+    expect(denied.response.status).toBe(403);
+
+    const response = await requestJson(`/api/leaves/${created.body.data.id}/rejected`, "PATCH", undefined, adminToken);
+    expect(response.response.status).toBe(200);
+    expect(response.body.data).toMatchObject({ status: "Rejected", category: "Izin", startDate: "2026-11-01", endDate: "2026-11-03" });
+  });
+
+  test("approve endpoint requires authentication and creates inclusive category attendance in one transaction", async () => {
+    // I have nothing but my burger and I want nothing more
+    const employee = await createUserAndLogin(namespace);
+    const created = await requestForm("/api/leaves", "POST", validForm({ startDate: "2026-12-07", endDate: "2026-12-10", category: "Sakit" }), employee.token);
+    const unauthorized = await requestJson(`/api/leaves/${created.body.data.id}/approved`, "PATCH");
+    expect(unauthorized.response.status).toBe(401);
+
+    const response = await requestJson(`/api/leaves/${created.body.data.id}/approved`, "PATCH", undefined, adminToken);
+    expect(response.response.status).toBe(200);
+    expect(response.body.data).toMatchObject({ status: "Approved", category: "Sakit" });
+    const rows = await testDb.select().from(testAttendances).where(inArray(testAttendances.user_id, [verifyToken(employee.token).id]));
+    const leaveRows = rows.filter((row) => row.date >= "2026-12-07" && row.date <= "2026-12-10");
+    expect(leaveRows).toHaveLength(4);
+    expect(leaveRows.map((row) => row.status)).toEqual(["Sakit", "Sakit", "Sakit", "Sakit"]);
+  });
+
+  test("approve transaction rolls back leave status when attendance already exists", async () => {
+    const employee = await createUserAndLogin(namespace);
+    const created = await requestForm("/api/leaves", "POST", validForm({ startDate: "2026-12-20", endDate: "2026-12-21", category: "Izin" }), employee.token);
+    const userId = verifyToken(employee.token).id;
+    await testDb.insert(testAttendances).values({
+      user_id: userId, date: "2026-12-20", check_in_time: new Date(), check_in_photo: "existing.webp", status: "Hadir",
+    });
+    const response = await requestJson(`/api/leaves/${created.body.data.id}/approved`, "PATCH", undefined, adminToken);
+    expect(response.response.status).toBe(500);
+    const [leave] = await testDb.select().from(testLeaves).where(eq(testLeaves.id, created.body.data.id));
+    expect(leave?.status).toBe("Pending");
+  });
+
+  test("approved Izin leaves create attendance with Izin status", async () => {
+    const employee = await createUserAndLogin(namespace);
+    const created = await requestForm("/api/leaves", "POST", validForm({ startDate: "2026-12-25", endDate: "2026-12-26", category: "Izin" }), employee.token);
+    const response = await requestJson(`/api/leaves/${created.body.data.id}/approved`, "PATCH", undefined, adminToken);
+    expect(response.response.status).toBe(200);
+    const userId = verifyToken(employee.token).id;
+    const rows = await testDb.select().from(testAttendances).where(eq(testAttendances.user_id, userId));
+    const leaveRows = rows.filter((row) => row.date >= "2026-12-25" && row.date <= "2026-12-26");
+    expect(leaveRows).toHaveLength(2);
+    expect(leaveRows.map((row) => row.status)).toEqual(["Izin", "Izin"]);
   });
 });

@@ -1,3 +1,5 @@
+import type { LeaveCategory } from "./request";
+
 export type LeaveStatus = "Pending" | "Approved" | "Rejected";
 
 export interface LeaveResponseData {
@@ -5,6 +7,7 @@ export interface LeaveResponseData {
   startDate: string;
   endDate: string;
   reason: string;
+  category: LeaveCategory;
   status: LeaveStatus;
   image: string | null;
   created_at: string;
@@ -26,6 +29,7 @@ export interface LeaveDetailData {
   start_date: string;
   end_date: string;
   reason: string;
+  category: LeaveCategory;
   status: LeaveStatus;
   image: string | null;
   created_at: string;
@@ -36,6 +40,29 @@ export interface LeaveDetailResponse {
   status: "success";
   data: LeaveDetailData;
 }
+
+export interface UpdateLeaveStatusData {
+  id: number;
+  startDate: string;
+  endDate: string;
+  category: LeaveCategory;
+  status: LeaveStatus;
+}
+
+export interface UpdateLeaveStatusResponse {
+  status: "success";
+  data: UpdateLeaveStatusData;
+}
+
+export type RejectLeaveStatusResponse = {
+  status: "success";
+  data: UpdateLeaveStatusData & { status: "Rejected" };
+};
+
+export type ApproveLeaveStatusResponse = {
+  status: "success";
+  data: UpdateLeaveStatusData & { status: "Approved" };
+};
 
 export interface ForbiddenErrorResponse {
   status: "error";

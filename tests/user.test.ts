@@ -170,11 +170,45 @@ describe("User API", () => {
   });
 
   describe("Update user", () => {
+    test("can activate and deactivate a user", async () => {
+      const payload = validUser(namespace);
+      const created = await registerUser(namespace, payload);
+      const id = created.body.data.id;
+
+      const deactivated = await requestJson(`/api/users/${id}`, "PATCH", { isActive: false }, adminToken);
+      expect(deactivated.response.status).toBe(200);
+      expect(deactivated.body.data.isActive).toBe(false);
+      expect((await requestJson(`/api/users/${id}`, "GET", undefined, adminToken)).body.data.isActive).toBe(false);
+
+      const activated = await requestJson(`/api/users/${id}`, "PATCH", { isActive: true }, adminToken);
+      expect(activated.response.status).toBe(200);
+      expect(activated.body.data.isActive).toBe(true);
+    });
+
+    test("parses isActive from multipart form data", async () => {
+      const payload = validUser(namespace);
+      const created = await registerUser(namespace, payload);
+      const form = new FormData();
+      form.set("isActive", "false");
+      const { response, body } = await requestForm(`/api/users/${created.body.data.id}`, "PATCH", form, adminToken);
+      expect(response.status).toBe(200);
+      expect(body.data.isActive).toBe(false);
+    });
+
+    test("updates only supplied fields", async () => {
+      const payload = validUser(namespace);
+      const created = await registerUser(namespace, payload);
+      const { response, body } = await requestJson(`/api/users/${created.body.data.id}`, "PATCH", { name: "Partial Update" }, adminToken);
+      expect(response.status).toBe(200);
+      expect(body.data.name).toBe("Partial Update");
+      expect(body.data.email).toBe(payload.email);
+    });
+
     test("updates user data while keeping the existing password when omitted", async () => {
       const payload = validUser(namespace);
       const created = await registerUser(namespace, payload);
       const update = { ...payload, password: undefined, name: "Updated User" };
-      const { response, body } = await requestJson(`/api/users/${created.body.data.id}`, "PUT", update, adminToken);
+      const { response, body } = await requestJson(`/api/users/${created.body.data.id}`, "PATCH", update, adminToken);
       expect(response.status).toBe(200);
       expect(body.message).toBe("Success update user");
       expect(body.data.name).toBe("Updated User");
@@ -184,7 +218,7 @@ describe("User API", () => {
     test("updates password only when a numeric password is provided", async () => {
       const payload = validUser(namespace);
       const created = await registerUser(namespace, payload);
-      const { response } = await requestJson(`/api/users/${created.body.data.id}`, "PUT", { ...payload, password: "9999" }, adminToken);
+      const { response } = await requestJson(`/api/users/${created.body.data.id}`, "PATCH", { ...payload, password: "9999" }, adminToken);
       expect(response.status).toBe(200);
       expect((await loginUser(payload.email, payload.password)).response.status).toBe(401);
       expect((await loginUser(payload.email, "9999")).response.status).toBe(200);
@@ -194,10 +228,10 @@ describe("User API", () => {
       const payload = validUser(namespace);
       const created = await registerUser(namespace, payload);
       const employeeToken = jwt.sign({ id: created.body.data.id, role: "employee" }, String(process.env.JWT_SECRET));
-      const employee = await requestJson(`/api/users/${created.body.data.id}`, "PUT", payload, employeeToken);
+      const employee = await requestJson(`/api/users/${created.body.data.id}`, "PATCH", payload, employeeToken);
       expect(employee.response.status).toBe(403);
       expect(employee.body.errors).toBe("Forbidden");
-      const unauthenticated = await requestJson(`/api/users/${created.body.data.id}`, "PUT", payload);
+      const unauthenticated = await requestJson(`/api/users/${created.body.data.id}`, "PATCH", payload);
       expect(unauthenticated.response.status).toBe(401);
       expect(unauthenticated.body.errors).toBe("Unauthorized");
     });
@@ -208,15 +242,15 @@ describe("User API", () => {
       const createdFirst = await registerUser(namespace, first);
       await registerUser(namespace, second);
 
-      const missing = await requestJson(`/api/users/${crypto.randomUUID()}`, "PUT", first, adminToken);
+      const missing = await requestJson(`/api/users/${crypto.randomUUID()}`, "PATCH", first, adminToken);
       expect(missing.response.status).toBe(404);
       expect(missing.body.errors).toBe("User Not found");
 
-      const duplicate = await requestJson(`/api/users/${createdFirst.body.data.id}`, "PUT", { ...first, email: second.email }, adminToken);
+      const duplicate = await requestJson(`/api/users/${createdFirst.body.data.id}`, "PATCH", { ...first, email: second.email }, adminToken);
       expect(duplicate.response.status).toBe(409);
       expect(duplicate.body.errors).toBe("(email/phone) already exist");
 
-      const invalid = await requestJson(`/api/users/${createdFirst.body.data.id}`, "PUT", { ...first, password: "abcd", salary: -1 }, adminToken);
+      const invalid = await requestJson(`/api/users/${createdFirst.body.data.id}`, "PATCH", { ...first, password: "abcd", salary: -1 }, adminToken);
       expect(invalid.response.status).toBe(400);
       expect(invalid.body.errors).toHaveProperty("password");
       expect(invalid.body.errors).toHaveProperty("salary");
@@ -228,7 +262,7 @@ describe("User API", () => {
       const form = new FormData();
       Object.entries({ ...payload, password: "" }).forEach(([key, value]) => form.set(key, String(value)));
       form.set("photo", new File([new Uint8Array([1, 2, 3])], "avatar.png", { type: "image/png" }));
-      const { response, body } = await requestForm(`/api/users/${created.body.data.id}`, "PUT", form, adminToken);
+      const { response, body } = await requestForm(`/api/users/${created.body.data.id}`, "PATCH", form, adminToken);
       expect(response.status).toBe(200);
       const [user] = await testDb.select({ photo: testUsers.photo }).from(testUsers).where(eq(testUsers.id, created.body.data.id));
       expect(user?.photo).toMatch(/\.png$/);
