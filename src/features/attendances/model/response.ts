@@ -72,7 +72,7 @@ export interface AttendanceStatsResponse {
   data: AttendanceStatsData;
 }
 
-export type AttendanceListStatus = "Hadir" | "Terlambat" | "Tidak Hadir" | "Sakit" | "Izin" | "Dinas";
+export type AttendanceListStatus = "Hadir" | "Terlambat" | "Tidak Hadir" | "Sakit" | "Izin" | "Dinas" | "Ditolak";
 
 export interface AttendanceListItem {
   id: number;
@@ -81,6 +81,7 @@ export interface AttendanceListItem {
   date: string;
   checkInTime: string;
   checkOutTime: string | null;
+  checkInPhoto: string;
   status: AttendanceListStatus;
 }
 
@@ -96,4 +97,20 @@ export interface ListAttendancesResponse {
   message: "Success get attendances";
   data: AttendanceListItem[];
   pagination: PaginationData;
+}
+
+export interface RejectAttendanceData {
+  id: number;
+  userId: string;
+  name: string;
+  date: string;
+  checkInTime: string;
+  checkOutTime: string | null;
+  status: "Ditolak";
+}
+
+export interface RejectAttendanceResponse {
+  status: "success";
+  message: "Success reject attendance";
+  data: RejectAttendanceData;
 }

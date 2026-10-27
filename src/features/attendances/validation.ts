@@ -46,7 +46,7 @@ export const attendanceHistoryQuerySchema = z.object({
 
 export type AttendanceHistoryQuery = z.infer<typeof attendanceHistoryQuerySchema>;
 
-export const validAttendanceStatuses = ["Hadir", "Terlambat", "Tidak Hadir", "Sakit", "Izin", "Dinas"] as const;
+export const validAttendanceStatuses = ["Hadir", "Terlambat", "Tidak Hadir", "Sakit", "Izin", "Dinas", "Ditolak"] as const;
 export type ValidAttendanceStatus = (typeof validAttendanceStatuses)[number];
 
 export function isValidAttendanceCalendarDate(value: string): boolean {
@@ -71,7 +71,7 @@ const paginationNumber = (field: string, minimum: number, maximum?: number, defa
 
 export const listAttendancesQuerySchema = z.object({
   status: z.enum(validAttendanceStatuses, {
-    error: "Status must be one of: Hadir, Terlambat, Tidak Hadir, Sakit, Izin, Dinas",
+    error: "Status must be one of: Hadir, Terlambat, Tidak Hadir, Sakit, Izin, Dinas, Ditolak",
   }).optional(),
   start_date: attendanceDateSchema.optional(),
   end_date: attendanceDateSchema.optional(),
@@ -95,3 +95,11 @@ export const listAttendancesQuerySchema = z.object({
 });
 
 export type ListAttendancesQuery = z.infer<typeof listAttendancesQuerySchema>;
+
+export const attendanceIdParamSchema = z.object({
+  id: z.coerce.number({ error: "Attendance ID must be a number" })
+    .int("Attendance ID must be an integer")
+    .positive("Attendance ID must be a positive integer"),
+});
+
+export type AttendanceIdParam = z.infer<typeof attendanceIdParamSchema>;

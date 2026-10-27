@@ -1,8 +1,8 @@
 import { Elysia, t } from "elysia";
 import { authMiddleware } from "../../middleware/auth";
-import { checkIn, checkOut, getAttendanceHistory, getAttendanceStats, getTodayAttendance, listAttendances } from "./service";
+import { checkIn, checkOut, getAttendanceHistory, getAttendanceStats, getTodayAttendance, listAttendances, rejectAttendance } from "./service";
 import type { AttendanceHistoryQueryInput, CheckInRequest, ListAttendancesQueryInput } from "./model/request";
-import type { AttendanceHistoryResponse, AttendanceStatsResponse, CheckInResponse, CheckOutResponse, ListAttendancesResponse } from "./model/response";
+import type { AttendanceHistoryResponse, AttendanceStatsResponse, CheckInResponse, CheckOutResponse, ListAttendancesResponse, RejectAttendanceResponse } from "./model/response";
 
 export const attendancesController = new Elysia({ prefix: "/api/attendances" })
   .use(authMiddleware)
@@ -26,9 +26,10 @@ export const attendancesController = new Elysia({ prefix: "/api/attendances" })
           date: t.String(),
           checkInTime: t.String(),
           checkOutTime: t.Nullable(t.String()),
+          checkInPhoto: t.String(),
           status: t.Union([
             t.Literal("Hadir"), t.Literal("Terlambat"), t.Literal("Tidak Hadir"),
-            t.Literal("Sakit"), t.Literal("Izin"), t.Literal("Dinas"),
+            t.Literal("Sakit"), t.Literal("Izin"), t.Literal("Dinas"), t.Literal("Ditolak"),
           ]),
         })),
         pagination: t.Object({
@@ -53,12 +54,49 @@ export const attendancesController = new Elysia({ prefix: "/api/attendances" })
       description: "Mengambil daftar kehadiran karyawan dengan filter status, rentang tanggal maksimal 60 hari, dan pagination. Hanya dapat diakses oleh admin aktif.",
       security: [{ bearerAuth: [] }],
       parameters: [
-        { in: "query", name: "status", required: false, schema: { type: "string", enum: ["Hadir", "Terlambat", "Tidak Hadir", "Sakit", "Izin", "Dinas"] } },
+        { in: "query", name: "status", required: false, schema: { type: "string", enum: ["Hadir", "Terlambat", "Tidak Hadir", "Sakit", "Izin", "Dinas", "Ditolak"] } },
         { in: "query", name: "start_date", required: false, description: "Batas awal inklusif (YYYY-MM-DD); wajib disertai end_date.", schema: { type: "string", format: "date" } },
         { in: "query", name: "end_date", required: false, description: "Batas akhir inklusif (YYYY-MM-DD); rentang maksimal 60 hari.", schema: { type: "string", format: "date" } },
         { in: "query", name: "limit", required: false, schema: { type: "integer", minimum: 1, maximum: 100, default: 20 } },
         { in: "query", name: "page", required: false, schema: { type: "integer", minimum: 1, default: 1 } },
       ],
+    },
+  })
+  .patch("/:id", async ({ authUser, params }): Promise<RejectAttendanceResponse> => ({
+    status: "success",
+    message: "Success reject attendance",
+    data: await rejectAttendance(authUser, params.id),
+  }), {
+    params: t.Object({ id: t.String({ description: "Attendance ID" }) }),
+    response: {
+      200: t.Object({
+        status: t.Literal("success"),
+        message: t.Literal("Success reject attendance"),
+        data: t.Object({
+          id: t.Number(),
+          userId: t.String(),
+          name: t.String(),
+          date: t.String(),
+          checkInTime: t.String(),
+          checkOutTime: t.Nullable(t.String()),
+          status: t.Literal("Ditolak"),
+        }),
+      }),
+      400: t.Object({
+        status: t.Literal("error"),
+        statusCode: t.Literal(400),
+        errors: t.Union([t.Record(t.String(), t.Array(t.String())), t.String()]),
+      }),
+      401: t.Object({ status: t.Literal("error"), statusCode: t.Literal(401), errors: t.Literal("Unauthorized") }),
+      403: t.Object({ status: t.Literal("error"), statusCode: t.Literal(403), errors: t.String() }),
+      404: t.Object({ status: t.Literal("error"), statusCode: t.Literal(404), errors: t.Literal("Attendance not found") }),
+      500: t.Object({ status: t.Literal("error"), statusCode: t.Literal(500), errors: t.Literal("Internal server error") }),
+    },
+    detail: {
+      tags: ["Attendances"],
+      summary: "Reject attendance (Admin Only)",
+      description: "Menolak absensi karyawan dengan mengubah status menjadi Ditolak. Attendance yang sudah ditolak tidak dapat di-reject kembali.",
+      security: [{ bearerAuth: [] }],
     },
   })
   .get("/stats", async ({ authUser }): Promise<AttendanceStatsResponse> => ({

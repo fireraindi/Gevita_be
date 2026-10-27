@@ -1,14 +1,14 @@
-import { and, asc, count, desc, eq, gte, isNull, lt, lte } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, isNull, lt, lte, ne } from "drizzle-orm";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { db } from "../../db";
 import { attendances, leaves, users } from "../../db/schema";
-import { ConflictError, ForbiddenError } from "../../errors/errors";
+import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../errors/errors";
 import { validate } from "../../helpers/validate";
 import { getCheckInPhotoUrl } from "../../helpers/photo";
 import type { AttendanceHistoryQueryInput, CheckInRequest, ListAttendancesQueryInput } from "./model/request";
-import type { AttendanceHistoryItem, AttendanceListItem, AttendanceStatsData, CheckInAttendanceData, CheckOutAttendanceData, PaginationData, TodayAttendanceData } from "./model/response";
-import { attendanceHistoryQuerySchema, checkInSchema, listAttendancesQuerySchema } from "./validation";
+import type { AttendanceHistoryItem, AttendanceListItem, AttendanceStatsData, CheckInAttendanceData, CheckOutAttendanceData, PaginationData, RejectAttendanceData, TodayAttendanceData } from "./model/response";
+import { attendanceHistoryQuerySchema, attendanceIdParamSchema, checkInSchema, listAttendancesQuerySchema } from "./validation";
 
 const attendanceTimeZone = "Asia/Jakarta";
 let lastPhotoTimestamp = 0;
@@ -109,16 +109,20 @@ export function getDefaultInclusiveMonthRange(now: Date = new Date()): { startDa
   };
 }
 
-export async function listAttendances(
-  currentUser: { id: string; role: "admin" | "employee" },
-  queryInput: ListAttendancesQueryInput,
-): Promise<{ data: AttendanceListItem[]; pagination: PaginationData }> {
+async function requireActiveAdmin(currentUser: { id: string; role: "admin" | "employee" }): Promise<void> {
   const [account] = await db.select({ role: users.role, isActive: users.is_active })
     .from(users)
     .where(eq(users.id, currentUser.id))
     .limit(1);
   if (!account?.isActive) throw new ForbiddenError("User account is inactive");
   if (currentUser.role !== "admin" || account.role !== "admin") throw new ForbiddenError("Forbidden");
+}
+
+export async function listAttendances(
+  currentUser: { id: string; role: "admin" | "employee" },
+  queryInput: ListAttendancesQueryInput,
+): Promise<{ data: AttendanceListItem[]; pagination: PaginationData }> {
+  await requireActiveAdmin(currentUser);
 
   const query = validate(listAttendancesQuerySchema, queryInput);
   const defaultRange = getDefaultInclusiveMonthRange();
@@ -142,6 +146,7 @@ export async function listAttendances(
     date: attendances.date,
     checkInTime: attendances.check_in_time,
     checkOutTime: attendances.check_out_time,
+    checkInPhoto: attendances.check_in_photo,
     status: attendances.status,
   })
     .from(attendances)
@@ -159,9 +164,60 @@ export async function listAttendances(
       date: row.date,
       checkInTime: formatTimeOnly(row.checkInTime) ?? "00:00:00",
       checkOutTime: formatTimeOnly(row.checkOutTime),
+      checkInPhoto: getCheckInPhotoUrl(row.checkInPhoto) ?? row.checkInPhoto,
       status: row.status,
     })),
     pagination: { page, limit, total, total_pages: total === 0 ? 0 : Math.ceil(total / limit) },
+  };
+}
+
+export async function rejectAttendance(
+  currentUser: { id: string; role: "admin" | "employee" },
+  attendanceIdInput: string,
+): Promise<RejectAttendanceData> {
+  await requireActiveAdmin(currentUser);
+  const { id: attendanceId } = validate(attendanceIdParamSchema, { id: attendanceIdInput });
+  const [attendance] = await db.select({
+    id: attendances.id,
+    userId: attendances.user_id,
+    name: users.name,
+    date: attendances.date,
+    checkInTime: attendances.check_in_time,
+    checkOutTime: attendances.check_out_time,
+    status: attendances.status,
+  })
+    .from(attendances)
+    .innerJoin(users, eq(attendances.user_id, users.id))
+    .where(and(eq(attendances.id, attendanceId), isNull(attendances.deleted_at)))
+    .limit(1);
+  if (!attendance) throw new NotFoundError("Attendance not found");
+  if (attendance.status === "Ditolak") throw new BadRequestError("Attendance already rejected");
+
+  const [updated] = await db.update(attendances)
+    .set({ status: "Ditolak", updated_at: new Date() })
+    .where(and(
+      eq(attendances.id, attendanceId),
+      isNull(attendances.deleted_at),
+      ne(attendances.status, "Ditolak"),
+    ))
+    .returning({ id: attendances.id });
+  if (!updated) {
+    const [current] = await db.select({ status: attendances.status })
+      .from(attendances)
+      .where(and(eq(attendances.id, attendanceId), isNull(attendances.deleted_at)))
+      .limit(1);
+    if (!current) throw new NotFoundError("Attendance not found");
+    throw new BadRequestError("Attendance already rejected");
+  }
+
+  return {
+    id: attendance.id,
+    userId: attendance.userId,
+    name: attendance.name,
+    date: attendance.date,
+    checkInTime: formatTimeOnly(attendance.checkInTime) ?? "00:00:00",
+    checkOutTime: formatTimeOnly(attendance.checkOutTime),
+    status: "Ditolak",
   };
 }
 

@@ -109,6 +109,7 @@ describe("Attendance API", () => {
       date: "2026-10-15",
       checkInTime: "08:02:03",
       checkOutTime: "16:10:11",
+      checkInPhoto: expect.stringMatching(/^http:\/\/localhost:3000\/uploads\/checkin\//),
       status: "Hadir",
     });
   });
@@ -184,6 +185,77 @@ describe("Attendance API", () => {
     expect(response.status).toBe(200);
     expect(body.data).toHaveLength(1);
     expect(body.data[0].id).toBe(visible.id);
+  });
+
+  test("rejects an attendance for an active admin and prevents rejecting it twice", async () => {
+    // I have nothing but my burger and I want nothing more
+    const employee = await createUserAndLogin(namespace);
+    const userId = verifyToken(employee.token).id;
+    const attendance = await seedAttendance(userId, "2026-10-09", "Hadir");
+    const admin = await createAdminAndLogin();
+
+    const { response, body } = await requestJson(`/api/attendances/${attendance.id}`, "PATCH", undefined, admin.token);
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({ status: "success", message: "Success reject attendance" });
+    expect(body.data).toMatchObject({
+      id: attendance.id,
+      userId,
+      name: employee.payload.name,
+      date: "2026-10-09",
+      checkInTime: "08:02:03",
+      checkOutTime: "16:10:11",
+      status: "Ditolak",
+    });
+
+    const repeated = await requestJson(`/api/attendances/${attendance.id}`, "PATCH", undefined, admin.token);
+    expect(repeated.response.status).toBe(400);
+    expect(repeated.body.errors).toBe("Attendance already rejected");
+
+    const list = await requestJson("/api/attendances?status=Ditolak&start_date=2026-10-09&end_date=2026-10-09", "GET", undefined, admin.token);
+    expect(list.response.status).toBe(200);
+    expect(list.body.data[0]).toMatchObject({ id: attendance.id, status: "Ditolak" });
+  });
+
+  test("reject attendance handles authentication, authorization, invalid IDs, and missing records", async () => {
+    const noToken = await requestJson("/api/attendances/1", "PATCH");
+    expect(noToken.response.status).toBe(401);
+    expect(noToken.body.errors).toBe("Unauthorized");
+
+    const employee = await createUserAndLogin(namespace);
+    const denied = await requestJson("/api/attendances/1", "PATCH", undefined, employee.token);
+    expect(denied.response.status).toBe(403);
+    expect(denied.body.errors).toBe("Forbidden");
+
+    const admin = await createAdminAndLogin();
+    const invalid = await requestJson("/api/attendances/not-a-number", "PATCH", undefined, admin.token);
+    expect(invalid.response.status).toBe(400);
+    expect(invalid.body.errors.id).toContain("Attendance ID must be a number");
+
+    const missing = await requestJson("/api/attendances/999999", "PATCH", undefined, admin.token);
+    expect(missing.response.status).toBe(404);
+    expect(missing.body.errors).toBe("Attendance not found");
+  });
+
+  test("inactive admin cannot reject attendance", async () => {
+    const employee = await createUserAndLogin(namespace);
+    const attendance = await seedAttendance(verifyToken(employee.token).id, "2026-10-09", "Hadir");
+    const admin = await createAdminAndLogin();
+    await testDb.update(testUsers).set({ is_active: false }).where(eq(testUsers.id, verifyToken(admin.token).id));
+
+    const { response, body } = await requestJson(`/api/attendances/${attendance.id}`, "PATCH", undefined, admin.token);
+    expect(response.status).toBe(403);
+    expect(body.errors).toBe("User account is inactive");
+  });
+
+  test("reject attendance returns 404 for a soft-deleted record", async () => {
+    const employee = await createUserAndLogin(namespace);
+    const attendance = await seedAttendance(verifyToken(employee.token).id, "2026-10-09", "Hadir");
+    await testDb.update(testAttendances).set({ deleted_at: new Date() }).where(eq(testAttendances.id, attendance.id));
+    const admin = await createAdminAndLogin();
+
+    const { response, body } = await requestJson(`/api/attendances/${attendance.id}`, "PATCH", undefined, admin.token);
+    expect(response.status).toBe(404);
+    expect(body.errors).toBe("Attendance not found");
   });
 
   test("rejects check-in without a token", async () => {
