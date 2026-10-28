@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gte, isNull, lt, lte, ne } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, ilike, isNull, lt, lte, ne } from "drizzle-orm";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { db } from "../../db";
@@ -133,9 +133,13 @@ export async function listAttendances(
     gte(attendances.date, startDate),
     lte(attendances.date, endDate),
   ];
+  if (query.search) conditions.push(ilike(users.name, `%${query.search}%`));
   if (query.status) conditions.push(eq(attendances.status, query.status));
   const whereClause = and(...conditions);
-  const [countRow] = await db.select({ total: count() }).from(attendances).where(whereClause);
+  const [countRow] = await db.select({ total: count() })
+    .from(attendances)
+    .innerJoin(users, eq(attendances.user_id, users.id))
+    .where(whereClause);
   const total = Number(countRow?.total ?? 0);
   const page = query.page;
   const limit = query.limit;

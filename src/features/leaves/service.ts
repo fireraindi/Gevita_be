@@ -1,15 +1,15 @@
-import { and, desc, eq, gte, isNull, lt } from "drizzle-orm";
+import { and, count, desc, eq, gte, ilike, isNull, lte, lt } from "drizzle-orm";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { db } from "../../db";
-import { attendances, leaves } from "../../db/schema";
+import { attendances, leaves, users } from "../../db/schema";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../../errors/errors";
 import { getLeavePhotoUrl } from "../../helpers/photo";
 import { validate } from "../../helpers/validate";
-import { createLeaveSchema, leaveHistoryQuerySchema, leaveIdParamSchema } from "./validation";
+import { createLeaveSchema, leaveHistoryQuerySchema, leaveIdParamSchema, listLeavesQuerySchema } from "./validation";
 import type { LeaveHistoryQuery } from "./validation";
-import type { CreateLeaveRequest } from "./model/request";
-import type { LeaveDetailData, LeaveResponseData, UpdateLeaveStatusData } from "./model/response";
+import type { CreateLeaveRequest, ListLeavesQueryInput } from "./model/request";
+import type { LeaveDetailData, LeaveListItem, LeaveListPagination, LeaveResponseData, UpdateLeaveStatusData } from "./model/response";
 
 let lastLeaveImageTimestamp = 0;
 
@@ -127,6 +127,77 @@ export async function getLeaveHistory(userId: string, query: LeaveHistoryQuery):
     image: getLeavePhotoUrl(row.image),
     created_at: row.created_at.toISOString(),
   }));
+}
+
+export function getDefaultLeaveListRange(now: Date = new Date()): { startDate: string; endDate: string } {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Jakarta", year: "numeric", month: "2-digit",
+  }).formatToParts(now);
+  const year = Number(parts.find((part) => part.type === "year")?.value ?? "0");
+  const month = Number(parts.find((part) => part.type === "month")?.value ?? "0");
+  const monthText = String(month).padStart(2, "0");
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return {
+    startDate: `${year}-${monthText}-01`,
+    endDate: `${year}-${monthText}-${String(lastDay).padStart(2, "0")}`,
+  };
+}
+
+async function requireActiveLeaveAdmin(currentUser: { id: string; role: "admin" | "employee" }): Promise<void> {
+  const [account] = await db.select({ role: users.role, isActive: users.is_active })
+    .from(users)
+    .where(eq(users.id, currentUser.id))
+    .limit(1);
+  if (!account?.isActive) throw new ForbiddenError("User account is inactive");
+  if (currentUser.role !== "admin" || account.role !== "admin") throw new ForbiddenError("Forbidden");
+}
+
+export async function listLeaves(
+  currentUser: { id: string; role: "admin" | "employee" },
+  queryInput: ListLeavesQueryInput,
+): Promise<{ data: LeaveListItem[]; pagination: LeaveListPagination }> {
+  await requireActiveLeaveAdmin(currentUser);
+  const query = validate(listLeavesQuerySchema, queryInput);
+  const defaultRange = getDefaultLeaveListRange();
+  const startDate = query.start_date ?? defaultRange.startDate;
+  const endDate = query.end_date ?? defaultRange.endDate;
+  const conditions = [
+    isNull(leaves.deleted_at),
+    lte(leaves.start_date, endDate),
+    gte(leaves.end_date, startDate),
+  ];
+  if (query.search) conditions.push(ilike(users.name, `%${query.search}%`));
+  if (query.category) conditions.push(eq(leaves.category, query.category));
+  const whereClause = and(...conditions);
+  const [countRow] = await db.select({ total: count() })
+    .from(leaves)
+    .innerJoin(users, eq(leaves.user_id, users.id))
+    .where(whereClause);
+  const total = Number(countRow?.total ?? 0);
+  const rows = await db.select({
+    id: leaves.id,
+    userId: leaves.user_id,
+    name: users.name,
+    startDate: leaves.start_date,
+    endDate: leaves.end_date,
+    category: leaves.category,
+    status: leaves.status,
+  })
+    .from(leaves)
+    .innerJoin(users, eq(leaves.user_id, users.id))
+    .where(whereClause)
+    .orderBy(desc(leaves.created_at), desc(leaves.id))
+    .limit(query.limit)
+    .offset((query.page - 1) * query.limit);
+  return {
+    data: rows,
+    pagination: {
+      page: query.page,
+      limit: query.limit,
+      total,
+      total_pages: total === 0 ? 0 : Math.ceil(total / query.limit),
+    },
+  };
 }
 
 export async function getLeaveDetail(

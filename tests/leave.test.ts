@@ -1,11 +1,12 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, setSystemTime, test } from "bun:test";
 import { join } from "node:path";
-import { adminToken, createUserAndLogin, eq, inArray, testAttendances, testDb, testLeaves, isolateApiNamespace, requestForm, requestJson, registerUser, loginUser, validUser, trackTestUpload, verifyToken } from "./helpers/apiTestHelpers";
+import { adminToken, createUserAndLogin, eq, inArray, testAttendances, testDb, testLeaves, testUsers, isolateApiNamespace, requestForm, requestJson, registerUser, loginUser, validUser, trackTestUpload, verifyToken } from "./helpers/apiTestHelpers";
 
 const namespace = "leave-suite";
 
 describe("Leave API", () => {
   isolateApiNamespace(namespace);
+  afterEach(() => setSystemTime());
 
   function validForm(overrides: Partial<Record<"startDate" | "endDate" | "reason" | "category", string>> = {}) {
     const form = new FormData();
@@ -15,6 +16,90 @@ describe("Leave API", () => {
     form.set("category", overrides.category ?? "Izin");
     return form;
   }
+
+  async function createAdminAndLogin() {
+    const payload = validUser(namespace, { role: "admin" });
+    const registration = await registerUser(namespace, payload);
+    if (registration.response.status !== 201) throw new Error("Test admin registration failed");
+    const login = await loginUser(payload.email, payload.password);
+    if (login.response.status !== 200) throw new Error("Test admin login failed");
+    return { payload, token: login.body.data.token as string };
+  }
+
+  describe("Get leave list (GET /api/leaves)", () => {
+    test("requires an active admin account", async () => {
+      const unauthorized = await requestJson("/api/leaves", "GET");
+      expect(unauthorized.response.status).toBe(401);
+
+      const employee = await createUserAndLogin(namespace);
+      const denied = await requestJson("/api/leaves", "GET", undefined, employee.token);
+      expect(denied.response.status).toBe(403);
+      expect(denied.body.errors).toBe("Forbidden");
+
+      const admin = await createAdminAndLogin();
+      await testDb.update(testUsers).set({ is_active: false }).where(eq(testUsers.id, verifyToken(admin.token).id));
+      const inactive = await requestJson("/api/leaves", "GET", undefined, admin.token);
+      expect(inactive.response.status).toBe(403);
+      expect(inactive.body.errors).toBe("User account is inactive");
+    });
+
+    test("filters by name, category, overlapping inclusive dates, excludes deleted rows, and paginates newest first", async () => {
+      const employee = await createUserAndLogin(namespace);
+      const first = await requestForm("/api/leaves", "POST", validForm({ startDate: "2026-09-30", endDate: "2026-10-02", category: "Sakit" }), employee.token);
+      const second = await requestForm("/api/leaves", "POST", validForm({ startDate: "2026-10-05", endDate: "2026-10-06", category: "Izin" }), employee.token);
+      const admin = await createAdminAndLogin();
+      await testDb.update(testLeaves).set({ deleted_at: new Date() }).where(eq(testLeaves.id, second.body.data.id));
+
+      const response = await requestJson("/api/leaves?search=TEST%20USER&category=Sakit&start_date=2026-10-01&end_date=2026-10-01&limit=1", "GET", undefined, admin.token);
+      expect(response.response.status).toBe(200);
+      expect(response.body).toMatchObject({
+        status: "success",
+        message: "Success get leaves",
+        pagination: { page: 1, limit: 1, total: 1, total_pages: 1 },
+      });
+      expect(response.body.data).toEqual([expect.objectContaining({
+        id: first.body.data.id,
+        userId: verifyToken(employee.token).id,
+        name: employee.payload.name,
+        startDate: "2026-09-30",
+        endDate: "2026-10-02",
+        category: "Sakit",
+        status: "Pending",
+      })]);
+
+      const deletedCategory = await requestJson("/api/leaves?category=Izin&start_date=2026-10-01&end_date=2026-10-10", "GET", undefined, admin.token);
+      expect(deletedCategory.response.status).toBe(200);
+      expect(deletedCategory.body.pagination.total).toBe(0);
+    });
+
+    test("uses Jakarta current month by default and validates date range and pagination", async () => {
+      setSystemTime(new Date("2026-10-28T05:00:00.000Z"));
+      const employee = await createUserAndLogin(namespace);
+      const currentMonthLeave = await requestForm("/api/leaves", "POST", validForm({ startDate: "2026-10-28", endDate: "2026-10-28" }), employee.token);
+      const admin = await createAdminAndLogin();
+      const defaultResult = await requestJson("/api/leaves", "GET", undefined, admin.token);
+      expect(defaultResult.response.status).toBe(200);
+      expect(defaultResult.body.pagination).toMatchObject({ page: 1, limit: 20, total: 1, total_pages: 1 });
+      expect(defaultResult.body.data[0].id).toBe(currentMonthLeave.body.data.id);
+
+      for (const query of [
+        "start_date=2026-10-01",
+        "start_date=2026-02-31&end_date=2026-03-01",
+        "start_date=2026-10-02&end_date=2026-10-01",
+        "start_date=2026-10-01&end_date=2026-11-30",
+        "limit=0", "limit=-1", "limit=1.5", "limit=101", "page=0", "page=-1", "page=1.5", "category=Liburan",
+      ]) {
+        const invalid = await requestJson(`/api/leaves?${query}`, "GET", undefined, admin.token);
+        expect(invalid.response.status).toBe(400);
+      }
+      const sameDay = await requestJson("/api/leaves?start_date=2026-10-28&end_date=2026-10-28&limit=100&page=2", "GET", undefined, admin.token);
+      expect(sameDay.response.status).toBe(200);
+      expect(sameDay.body.pagination).toMatchObject({ page: 2, limit: 100, total: 1, total_pages: 1 });
+      expect(sameDay.body.data).toHaveLength(0);
+      const maximumRange = await requestJson("/api/leaves?start_date=2026-10-01&end_date=2026-11-29", "GET", undefined, admin.token);
+      expect(maximumRange.response.status).toBe(200);
+    });
+  });
 
   test("requires authentication", async () => {
     const { response, body } = await requestForm("/api/leaves", "POST", validForm());

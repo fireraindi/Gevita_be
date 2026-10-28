@@ -2,6 +2,30 @@ import type { LeaveCategory } from "./request";
 
 export type LeaveStatus = "Pending" | "Approved" | "Rejected";
 
+export interface LeaveListItem {
+  id: number;
+  userId: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  category: LeaveCategory;
+  status: LeaveStatus;
+}
+
+export interface LeaveListPagination {
+  page: number;
+  limit: number;
+  total: number;
+  total_pages: number;
+}
+
+export interface LeaveListResponse {
+  status: "success";
+  message: "Success get leaves";
+  data: LeaveListItem[];
+  pagination: LeaveListPagination;
+}
+
 export interface LeaveResponseData {
   id: number;
   startDate: string;

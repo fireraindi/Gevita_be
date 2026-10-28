@@ -1,12 +1,52 @@
 import { Elysia, t } from "elysia";
 import { authMiddleware } from "../../middleware/auth";
-import type { CreateLeaveRequest } from "./model/request";
-import type { ApproveLeaveStatusResponse, CreateLeaveSuccessResponse, LeaveDetailResponse, LeaveHistoryResponse, RejectLeaveStatusResponse } from "./model/response";
-import { approveLeave, createLeave, getLeaveDetail, getLeaveHistory, rejectLeave } from "./service";
+import type { CreateLeaveRequest, ListLeavesQueryInput } from "./model/request";
+import type { ApproveLeaveStatusResponse, CreateLeaveSuccessResponse, LeaveDetailResponse, LeaveHistoryResponse, LeaveListResponse, RejectLeaveStatusResponse } from "./model/response";
+import { approveLeave, createLeave, getLeaveDetail, getLeaveHistory, listLeaves, rejectLeave } from "./service";
 import type { LeaveHistoryQuery } from "./validation";
 
 export const leavesController = new Elysia({ prefix: "/api/leaves" })
   .use(authMiddleware)
+  .get("", async ({ authUser, query }): Promise<LeaveListResponse> => {
+    const result = await listLeaves(authUser, query as ListLeavesQueryInput);
+    return {
+      status: "success",
+      message: "Success get leaves",
+      data: result.data,
+      pagination: result.pagination,
+    };
+  }, {
+    response: {
+      200: t.Object({
+        status: t.Literal("success"),
+        message: t.Literal("Success get leaves"),
+        data: t.Array(t.Object({
+          id: t.Number(), userId: t.String(), name: t.String(), startDate: t.String(), endDate: t.String(),
+          category: t.Union([t.Literal("Sakit"), t.Literal("Izin")]),
+          status: t.Union([t.Literal("Pending"), t.Literal("Approved"), t.Literal("Rejected")]),
+        })),
+        pagination: t.Object({ page: t.Number(), limit: t.Number(), total: t.Number(), total_pages: t.Number() }),
+      }),
+      400: t.Object({ status: t.Literal("error"), statusCode: t.Literal(400), errors: t.Union([t.Record(t.String(), t.Array(t.String())), t.String()]) }),
+      401: t.Object({ status: t.Literal("error"), statusCode: t.Literal(401), errors: t.Literal("Unauthorized") }),
+      403: t.Object({ status: t.Literal("error"), statusCode: t.Literal(403), errors: t.String() }),
+      500: t.Object({ status: t.Literal("error"), statusCode: t.Literal(500), errors: t.Literal("Internal server error") }),
+    },
+    detail: {
+      tags: ["Leaves"],
+      summary: "Get leave list (Admin Only)",
+      description: "Mengambil daftar pengajuan cuti semua karyawan dengan filter nama, kategori, rentang tanggal inklusif maksimal 60 hari, dan pagination. Default rentang adalah bulan berjalan Asia/Jakarta; hanya admin aktif.",
+      security: [{ bearerAuth: [] }],
+      parameters: [
+        { in: "query", name: "search", required: false, description: "Cari sebagian nama karyawan tanpa membedakan kapital.", schema: { type: "string", maxLength: 100 } },
+        { in: "query", name: "category", required: false, schema: { type: "string", enum: ["Sakit", "Izin"] } },
+        { in: "query", name: "start_date", required: false, description: "Batas awal inklusif YYYY-MM-DD; harus disertai end_date.", schema: { type: "string", format: "date" } },
+        { in: "query", name: "end_date", required: false, description: "Batas akhir inklusif YYYY-MM-DD; rentang maksimal 60 hari kalender.", schema: { type: "string", format: "date" } },
+        { in: "query", name: "limit", required: false, schema: { type: "integer", minimum: 1, maximum: 100, default: 20 } },
+        { in: "query", name: "page", required: false, schema: { type: "integer", minimum: 1, default: 1 } },
+      ],
+    },
+  })
   .get("/history", async ({ authUser, query }): Promise<LeaveHistoryResponse> => ({
     status: "success",
     data: await getLeaveHistory(authUser.id, query as LeaveHistoryQuery),
@@ -41,7 +81,7 @@ export const leavesController = new Elysia({ prefix: "/api/leaves" })
     data: await getLeaveDetail(authUser, Number(params.id)),
   }), {
     params: t.Object({
-      id: t.Numeric({ description: "Leave request ID", minimum: 1, error: "Leave ID must be a positive integer" }),
+      id: t.String({ description: "Leave request ID" }),
     }),
     response: {
       200: t.Object({

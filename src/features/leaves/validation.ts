@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { CreateLeaveRequest } from "./model/request";
+import type { CreateLeaveRequest, ListLeavesQueryInput } from "./model/request";
 
 const allowedExtensions = new Set([".jpg", ".jpeg", ".png", ".webp"]);
 const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -38,6 +38,40 @@ export const leaveHistoryQuerySchema = z.object({
   date: z.union([monthSchema, z.literal("")]).optional(),
 });
 
+const listPaginationNumber = (field: string, defaultValue: number, maximum?: number) => z.preprocess(
+  (value) => value === undefined || value === "" ? defaultValue : value,
+  z.coerce.number({ error: `${field} must be a number` })
+    .int(`${field} must be an integer`)
+    .min(1, `${field} must be at least 1`)
+    .refine((value) => maximum === undefined || value <= maximum, {
+      message: maximum === undefined ? `${field} is out of range` : `${field} must not exceed ${maximum}`,
+    }),
+);
+
+export const listLeavesQuerySchema = z.object({
+  search: z.string().trim().max(100, "Search must not exceed 100 characters").optional(),
+  category: z.enum(["Sakit", "Izin"]).optional(),
+  start_date: dateSchema.optional(),
+  end_date: dateSchema.optional(),
+  limit: listPaginationNumber("Limit", 20, 100),
+  page: listPaginationNumber("Page", 1),
+}).superRefine((query, context) => {
+  if (Boolean(query.start_date) !== Boolean(query.end_date)) {
+    context.addIssue({ code: "custom", path: [query.start_date ? "end_date" : "start_date"], message: "Both start_date and end_date must be provided together" });
+    return;
+  }
+  if (!query.start_date || !query.end_date) return;
+  if (query.end_date < query.start_date) {
+    context.addIssue({ code: "custom", path: ["end_date"], message: "End date must be greater than or equal to start date" });
+    return;
+  }
+  const start = Date.parse(`${query.start_date}T00:00:00.000Z`);
+  const end = Date.parse(`${query.end_date}T00:00:00.000Z`);
+  if ((end - start) / 86_400_000 + 1 > 60) {
+    context.addIssue({ code: "custom", path: ["end_date"], message: "Date range must not exceed 60 days" });
+  }
+}) satisfies z.ZodType<ListLeavesQueryInput & { limit: number; page: number }>;
+
 export const leaveIdParamSchema = z.object({
   id: z.coerce.number({ error: "Leave ID must be a number" })
     .int("Leave ID must be an integer")
@@ -45,4 +79,5 @@ export const leaveIdParamSchema = z.object({
 });
 
 export type LeaveHistoryQuery = z.infer<typeof leaveHistoryQuerySchema>;
+export type ListLeavesQuery = z.infer<typeof listLeavesQuerySchema>;
 export type LeaveIdParam = z.infer<typeof leaveIdParamSchema>;

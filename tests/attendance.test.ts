@@ -152,6 +152,25 @@ describe("Attendance API", () => {
     expect(page.body.data.map((row: { date: string }) => row.date)).toEqual(["2026-09-15", "2026-09-10"]);
   });
 
+  test("searches attendances by a partial, case-insensitive employee name and filters pagination totals", async () => {
+    const firstEmployee = await createUserAndLogin(namespace);
+    const firstUserId = verifyToken(firstEmployee.token).id;
+    const secondEmployee = await createUserAndLogin(namespace);
+    const secondUserId = verifyToken(secondEmployee.token).id;
+    await testDb.update(testUsers).set({ name: "Ayu Maharani" }).where(eq(testUsers.id, firstUserId));
+    await testDb.update(testUsers).set({ name: "Budi Santoso" }).where(eq(testUsers.id, secondUserId));
+    await seedAttendance(firstUserId, "2026-10-10");
+    await seedAttendance(firstUserId, "2026-10-11");
+    await seedAttendance(secondUserId, "2026-10-12");
+    const admin = await createAdminAndLogin();
+
+    const { response, body } = await requestJson("/api/attendances?search=AYU%20maha&limit=1", "GET", undefined, admin.token);
+    expect(response.status).toBe(200);
+    expect(body.pagination).toMatchObject({ page: 1, limit: 1, total: 2, total_pages: 2 });
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0].name).toBe("Ayu Maharani");
+  });
+
   test.each([
     ["invalid status", "status=Unknown", "status"],
     ["bad calendar date", "start_date=2026-02-30&end_date=2026-03-01", "start_date"],
@@ -161,6 +180,7 @@ describe("Attendance API", () => {
     ["zero limit", "limit=0", "limit"],
     ["limit over 100", "limit=101", "limit"],
     ["invalid page", "page=-1", "page"],
+    ["search too long", `search=${"a".repeat(101)}`, "search"],
   ] as const)("rejects %s query parameters", async (_case, query) => {
     const admin = await createAdminAndLogin();
     const { response, body } = await requestJson(`/api/attendances?${query}`, "GET", undefined, admin.token);

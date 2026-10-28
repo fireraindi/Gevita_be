@@ -6,7 +6,44 @@ Semua endpoint membutuhkan header: `Authorization: Bearer <token>`
 
 ---
 
-## 1. Mengajukan Cuti
+## 1. Daftar Pengajuan Cuti (Admin)
+
+Mengambil daftar pengajuan cuti semua karyawan. Hanya admin aktif yang dapat mengakses endpoint ini. Riwayat milik karyawan yang sedang login tetap tersedia melalui `GET /api/leaves/history`.
+
+- **URL:** `GET /api/leaves`
+- **Query params:**
+  - `search` (opsional): pencarian sebagian nama karyawan, tanpa membedakan kapital.
+  - `category` (opsional): `Sakit` atau `Izin`.
+  - `start_date` dan `end_date` (opsional): tanggal `YYYY-MM-DD`, inklusif dan wajib dikirim bersama. Jika keduanya tidak dikirim, gunakan bulan berjalan zona waktu `Asia/Jakarta`.
+  - Rentang tanggal maksimal 60 hari kalender termasuk tanggal awal dan akhir; `end_date` boleh sama dengan `start_date`.
+  - `limit` (opsional): integer 1–100, default 20.
+  - `page` (opsional): integer positif, default 1.
+- Cuti yang rentang tanggalnya beririsan dengan filter akan ditampilkan, termasuk cuti yang dimulai sebelum `start_date` atau berakhir setelah `end_date`.
+- Hasil diurutkan dari pengajuan terbaru (`created_at` menurun; ID menurun untuk urutan yang stabil). Data yang dihapus lunak tidak disertakan.
+- **Success `200 OK`:**
+
+  ```json
+  {
+    "status": "success",
+    "message": "Success get leaves",
+    "data": [
+      {
+        "id": 1,
+        "userId": "user-id",
+        "name": "Water Erifsen",
+        "startDate": "2026-10-01",
+        "endDate": "2026-10-03",
+        "category": "Sakit",
+        "status": "Pending"
+      }
+    ],
+    "pagination": { "page": 1, "limit": 20, "total": 1, "total_pages": 1 }
+  }
+  ```
+
+- **Errors:** `400 Bad Request` untuk query tidak valid; `401 Unauthorized` untuk token tidak valid/tidak ada; `403 Forbidden` untuk non-admin aktif (akun nonaktif mengembalikan `User account is inactive`); `500 Internal Server Error` untuk kegagalan server.
+
+## 2. Mengajukan Cuti
 
 Melakukan pengajuan cuti baru.
 
@@ -44,7 +81,7 @@ Melakukan pengajuan cuti baru.
 
 ---
 
-## 2. Riwayat Cuti
+## 3. Riwayat Cuti
 
 Mendapatkan daftar semua pengajuan cuti milik karyawan yang login.
 
@@ -72,7 +109,7 @@ Mendapatkan daftar semua pengajuan cuti milik karyawan yang login.
 
 ---
 
-## 3. Detail Cuti
+## 4. Detail Cuti
 
 Mendapatkan detail satu pengajuan cuti berdasarkan ID.
 

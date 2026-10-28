@@ -54,6 +54,7 @@ export const attendancesController = new Elysia({ prefix: "/api/attendances" })
       description: "Mengambil daftar kehadiran karyawan dengan filter status, rentang tanggal maksimal 60 hari, dan pagination. Hanya dapat diakses oleh admin aktif.",
       security: [{ bearerAuth: [] }],
       parameters: [
+        { in: "query", name: "search", required: false, description: "Cari nama karyawan (pencarian sebagian, tidak membedakan huruf besar/kecil).", schema: { type: "string", maxLength: 100 } },
         { in: "query", name: "status", required: false, schema: { type: "string", enum: ["Hadir", "Terlambat", "Tidak Hadir", "Sakit", "Izin", "Dinas", "Ditolak"] } },
         { in: "query", name: "start_date", required: false, description: "Batas awal inklusif (YYYY-MM-DD); wajib disertai end_date.", schema: { type: "string", format: "date" } },
         { in: "query", name: "end_date", required: false, description: "Batas akhir inklusif (YYYY-MM-DD); rentang maksimal 60 hari.", schema: { type: "string", format: "date" } },

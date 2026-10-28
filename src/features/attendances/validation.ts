@@ -70,6 +70,7 @@ const paginationNumber = (field: string, minimum: number, maximum?: number, defa
 );
 
 export const listAttendancesQuerySchema = z.object({
+  search: z.string().trim().max(100, "Search must not exceed 100 characters").optional(),
   status: z.enum(validAttendanceStatuses, {
     error: "Status must be one of: Hadir, Terlambat, Tidak Hadir, Sakit, Izin, Dinas, Ditolak",
   }).optional(),
