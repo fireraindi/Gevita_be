@@ -14,7 +14,7 @@ Mengambil daftar pengajuan cuti semua karyawan. Hanya admin aktif yang dapat men
 - **Query params:**
   - `search` (opsional): pencarian sebagian nama karyawan, tanpa membedakan kapital.
   - `category` (opsional): `Sakit` atau `Izin`.
-  - `start_date` dan `end_date` (opsional): tanggal `YYYY-MM-DD`, inklusif dan wajib dikirim bersama. Jika keduanya tidak dikirim, gunakan bulan berjalan zona waktu `Asia/Jakarta`.
+  - `start_date` dan `end_date` (opsional): tanggal `YYYY-MM-DD`, inklusif dan wajib dikirim bersama. Jika tidak dikirim, semua pengajuan cuti akan diambil dan diurutkan dari yang terbaru dibuat.
   - Rentang tanggal maksimal 60 hari kalender termasuk tanggal awal dan akhir; `end_date` boleh sama dengan `start_date`.
   - `limit` (opsional): integer 1–100, default 20.
   - `page` (opsional): integer positif, default 1.
@@ -83,12 +83,13 @@ Melakukan pengajuan cuti baru.
 
 ## 3. Riwayat Cuti
 
-Mendapatkan daftar semua pengajuan cuti milik karyawan yang login.
+Mendapatkan daftar semua riwayat permohonan cuti milik karyawan yang login, diurutkan dari yang terbaru dibuat (`created_at` menurun, `id` menurun).
 
-- **URL:** `GET /api/leaves`
+- **URL:** `GET /api/leaves/history`
 - **Headers:** `Authorization: Bearer <token>`
 - **Query Params:**
   - `status` _(string, opsional)_: Filter berdasarkan status (`Pending`, `Approved`, `Rejected`)
+  - `date` _(string, opsional)_: Bulan dan tahun dalam format `YYYY-MM`. Jika tidak dikirim, seluruh riwayat termasuk pengajuan cuti untuk bulan depan/mendatang akan dikembalikan.
 - **Success Response `200 OK`:**
   ```json
   {
@@ -96,9 +97,10 @@ Mendapatkan daftar semua pengajuan cuti milik karyawan yang login.
     "data": [
       {
         "id": 1,
-        "start_date": "2023-11-01",
-        "end_date": "2023-11-03",
+        "startDate": "2023-11-01",
+        "endDate": "2023-11-03",
         "reason": "Acara keluarga",
+        "category": "Izin",
         "status": "Pending",
         "image": null,
         "created_at": "2023-10-25T10:00:00Z"

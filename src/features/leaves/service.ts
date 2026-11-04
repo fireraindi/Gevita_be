@@ -90,33 +90,21 @@ export async function createLeave(userId: string, request: CreateLeaveRequest): 
   }
 }
 
-function getCurrentJakartaMonth(now: Date): { startDate: string; endDate: string } {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Asia/Jakarta", year: "numeric", month: "2-digit",
-  }).formatToParts(now);
-  const year = parts.find((part) => part.type === "year")?.value ?? "";
-  const month = parts.find((part) => part.type === "month")?.value ?? "";
-  const endDate = new Date(Date.UTC(Number(year), Number(month), 1)).toISOString().slice(0, 10);
-  return { startDate: `${year}-${month}-01`, endDate };
-}
-
 export async function getLeaveHistory(userId: string, query: LeaveHistoryQuery): Promise<LeaveResponseData[]> {
   const input = validate(leaveHistoryQuerySchema, query);
   const conditions = [eq(leaves.user_id, userId), isNull(leaves.deleted_at)];
   if (input.status) conditions.push(eq(leaves.status, input.status));
 
-  const month = input.date ? {
-    startDate: `${input.date}-01`,
-    endDate: (() => {
-      const [year, monthNumber] = input.date!.split("-").map(Number);
-      return new Date(Date.UTC(year!, monthNumber!, 1)).toISOString().slice(0, 10);
-    })(),
-  } : getCurrentJakartaMonth(new Date());
-  conditions.push(gte(leaves.start_date, month.startDate), lt(leaves.start_date, month.endDate));
+  if (input.date) {
+    const [year, monthNumber] = input.date.split("-").map(Number);
+    const startDate = `${input.date}-01`;
+    const endDate = new Date(Date.UTC(year!, monthNumber!, 1)).toISOString().slice(0, 10);
+    conditions.push(gte(leaves.start_date, startDate), lt(leaves.start_date, endDate));
+  }
 
   const rows = await db.select().from(leaves)
     .where(and(...conditions))
-    .orderBy(desc(leaves.created_at));
+    .orderBy(desc(leaves.created_at), desc(leaves.id));
   return rows.map((row) => ({
     id: row.id,
     startDate: row.start_date,
@@ -127,20 +115,6 @@ export async function getLeaveHistory(userId: string, query: LeaveHistoryQuery):
     image: getLeavePhotoUrl(row.image),
     created_at: row.created_at.toISOString(),
   }));
-}
-
-export function getDefaultLeaveListRange(now: Date = new Date()): { startDate: string; endDate: string } {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Asia/Jakarta", year: "numeric", month: "2-digit",
-  }).formatToParts(now);
-  const year = Number(parts.find((part) => part.type === "year")?.value ?? "0");
-  const month = Number(parts.find((part) => part.type === "month")?.value ?? "0");
-  const monthText = String(month).padStart(2, "0");
-  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
-  return {
-    startDate: `${year}-${monthText}-01`,
-    endDate: `${year}-${monthText}-${String(lastDay).padStart(2, "0")}`,
-  };
 }
 
 async function requireActiveLeaveAdmin(currentUser: { id: string; role: "admin" | "employee" }): Promise<void> {
@@ -158,14 +132,13 @@ export async function listLeaves(
 ): Promise<{ data: LeaveListItem[]; pagination: LeaveListPagination }> {
   await requireActiveLeaveAdmin(currentUser);
   const query = validate(listLeavesQuerySchema, queryInput);
-  const defaultRange = getDefaultLeaveListRange();
-  const startDate = query.start_date ?? defaultRange.startDate;
-  const endDate = query.end_date ?? defaultRange.endDate;
-  const conditions = [
-    isNull(leaves.deleted_at),
-    lte(leaves.start_date, endDate),
-    gte(leaves.end_date, startDate),
-  ];
+  const conditions = [isNull(leaves.deleted_at)];
+  if (query.start_date && query.end_date) {
+    conditions.push(
+      lte(leaves.start_date, query.end_date),
+      gte(leaves.end_date, query.start_date),
+    );
+  }
   if (query.search) conditions.push(ilike(users.name, `%${query.search}%`));
   if (query.category) conditions.push(eq(leaves.category, query.category));
   const whereClause = and(...conditions);

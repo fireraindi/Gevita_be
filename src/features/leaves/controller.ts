@@ -35,7 +35,7 @@ export const leavesController = new Elysia({ prefix: "/api/leaves" })
     detail: {
       tags: ["Leaves"],
       summary: "Get leave list (Admin Only)",
-      description: "Mengambil daftar pengajuan cuti semua karyawan dengan filter nama, kategori, rentang tanggal inklusif maksimal 60 hari, dan pagination. Default rentang adalah bulan berjalan Asia/Jakarta; hanya admin aktif.",
+      description: "Mengambil daftar pengajuan cuti semua karyawan dari yang terbaru (created_at DESC, id DESC), dengan filter opsional nama, kategori, rentang tanggal inklusif maksimal 60 hari, dan pagination. Hanya admin aktif.",
       security: [{ bearerAuth: [] }],
       parameters: [
         { in: "query", name: "search", required: false, description: "Cari sebagian nama karyawan tanpa membedakan kapital.", schema: { type: "string", maxLength: 100 } },
@@ -68,11 +68,11 @@ export const leavesController = new Elysia({ prefix: "/api/leaves" })
     detail: {
       tags: ["Leaves"],
       summary: "Get leave history",
-      description: "Mengambil riwayat permohonan cuti pengguna yang sedang login. Filter status dan bulan (YYYY-MM) opsional; jika date tidak diisi atau kosong, hasil dibatasi ke bulan berjalan.",
+      description: "Mengambil riwayat permohonan cuti pengguna yang sedang login dari yang terbaru (created_at DESC, id DESC). Filter status dan bulan (YYYY-MM) opsional; jika date tidak diisi, seluruh riwayat termasuk pengajuan bulan depan akan dikembalikan.",
       security: [{ bearerAuth: [] }],
       parameters: [
         { in: "query", name: "status", required: false, schema: { type: "string", enum: ["Pending", "Approved", "Rejected"] } },
-        { in: "query", name: "date", required: false, description: "Bulan dan tahun YYYY-MM. Default: bulan berjalan jika kosong.", schema: { type: "string", pattern: "^\\d{4}-(0[1-9]|1[0-2])$", example: "2026-10" } },
+        { in: "query", name: "date", required: false, description: "Bulan dan tahun YYYY-MM (opsional). Jika tidak diisi, mengembalikan seluruh riwayat pengajuan cuti terbaru.", schema: { type: "string", pattern: "^\\d{4}-(0[1-9]|1[0-2])$", example: "2026-10" } },
       ],
     },
   })
@@ -122,6 +122,7 @@ export const leavesController = new Elysia({ prefix: "/api/leaves" })
       status: "success",
       message: "Pengajuan cuti berhasil dikirim",
       data: await createLeave(authUser.id, body as CreateLeaveRequest),
+    
     };
   }, {
     type: "multipart/form-data",

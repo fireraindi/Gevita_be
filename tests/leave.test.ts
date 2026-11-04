@@ -72,15 +72,17 @@ describe("Leave API", () => {
       expect(deletedCategory.body.pagination.total).toBe(0);
     });
 
-    test("uses Jakarta current month by default and validates date range and pagination", async () => {
+    test("defaults to newest leaves without date filter including future months and validates date range and pagination", async () => {
       setSystemTime(new Date("2026-10-28T05:00:00.000Z"));
       const employee = await createUserAndLogin(namespace);
       const currentMonthLeave = await requestForm("/api/leaves", "POST", validForm({ startDate: "2026-10-28", endDate: "2026-10-28" }), employee.token);
+      const nextMonthLeave = await requestForm("/api/leaves", "POST", validForm({ startDate: "2026-11-10", endDate: "2026-11-12" }), employee.token);
       const admin = await createAdminAndLogin();
       const defaultResult = await requestJson("/api/leaves", "GET", undefined, admin.token);
       expect(defaultResult.response.status).toBe(200);
-      expect(defaultResult.body.pagination).toMatchObject({ page: 1, limit: 20, total: 1, total_pages: 1 });
-      expect(defaultResult.body.data[0].id).toBe(currentMonthLeave.body.data.id);
+      expect(defaultResult.body.pagination).toMatchObject({ page: 1, limit: 20, total: 2, total_pages: 1 });
+      expect(defaultResult.body.data[0].id).toBe(nextMonthLeave.body.data.id);
+      expect(defaultResult.body.data[1].id).toBe(currentMonthLeave.body.data.id);
 
       for (const query of [
         "start_date=2026-10-01",
@@ -280,5 +282,77 @@ describe("Leave API", () => {
     const leaveRows = rows.filter((row) => row.date >= "2026-12-25" && row.date <= "2026-12-26");
     expect(leaveRows).toHaveLength(2);
     expect(leaveRows.map((row) => row.status)).toEqual(["Izin", "Izin"]);
+  });
+
+  describe("Get leave history (GET /api/leaves/history)", () => {
+    test("requires authentication", async () => {
+      const response = await requestJson("/api/leaves/history", "GET");
+      expect(response.response.status).toBe(401);
+      expect(response.body.errors).toBe("Unauthorized");
+    });
+
+    test("returns all leaves newest first by default including next month leave", async () => {
+      setSystemTime(new Date("2026-10-28T05:00:00.000Z"));
+      const employee = await createUserAndLogin(namespace);
+      const octoberLeave = await requestForm("/api/leaves", "POST", validForm({ startDate: "2026-10-29", endDate: "2026-10-30", reason: "Sakit flu", category: "Sakit" }), employee.token);
+      const novemberLeave = await requestForm("/api/leaves", "POST", validForm({ startDate: "2026-11-15", endDate: "2026-11-17", reason: "Acara nikahan keluarga", category: "Izin" }), employee.token);
+
+      const response = await requestJson("/api/leaves/history", "GET", undefined, employee.token);
+      expect(response.response.status).toBe(200);
+      expect(response.body.status).toBe("success");
+      expect(response.body.data).toHaveLength(2);
+      expect(response.body.data[0].id).toBe(novemberLeave.body.data.id);
+      expect(response.body.data[0].startDate).toBe("2026-11-15");
+      expect(response.body.data[1].id).toBe(octoberLeave.body.data.id);
+      expect(response.body.data[1].startDate).toBe("2026-10-29");
+    });
+
+    test("filters by date (YYYY-MM) and status, excludes deleted and other user records", async () => {
+      const userA = await createUserAndLogin(namespace);
+      const userB = await createUserAndLogin(namespace);
+
+      const leaveOct = await requestForm("/api/leaves", "POST", validForm({ startDate: "2026-10-10", endDate: "2026-10-12", category: "Sakit" }), userA.token);
+      const leaveNovPending = await requestForm("/api/leaves", "POST", validForm({ startDate: "2026-11-02", endDate: "2026-11-03", category: "Izin" }), userA.token);
+      const leaveNovApproved = await requestForm("/api/leaves", "POST", validForm({ startDate: "2026-11-20", endDate: "2026-11-21", category: "Izin" }), userA.token);
+      const leaveDeleted = await requestForm("/api/leaves", "POST", validForm({ startDate: "2026-11-25", endDate: "2026-11-26", category: "Izin" }), userA.token);
+
+      // Cuti milik userB
+      await requestForm("/api/leaves", "POST", validForm({ startDate: "2026-11-05", endDate: "2026-11-06", category: "Sakit" }), userB.token);
+
+      // Approve leaveNovApproved
+      await requestJson(`/api/leaves/${leaveNovApproved.body.data.id}/approved`, "PATCH", undefined, adminToken);
+      // Soft-delete leaveDeleted
+      await testDb.update(testLeaves).set({ deleted_at: new Date() }).where(eq(testLeaves.id, leaveDeleted.body.data.id));
+
+      // Filter date=2026-11 (seharusnya hanya leaveNovApproved dan leaveNovPending milik userA)
+      const resNov = await requestJson("/api/leaves/history?date=2026-11", "GET", undefined, userA.token);
+      expect(resNov.response.status).toBe(200);
+      expect(resNov.body.data).toHaveLength(2);
+      expect(resNov.body.data.map((d: { id: number }) => d.id)).toEqual([leaveNovApproved.body.data.id, leaveNovPending.body.data.id]);
+
+      // Filter status=Approved
+      const resApproved = await requestJson("/api/leaves/history?status=Approved", "GET", undefined, userA.token);
+      expect(resApproved.response.status).toBe(200);
+      expect(resApproved.body.data).toHaveLength(1);
+      expect(resApproved.body.data[0].id).toBe(leaveNovApproved.body.data.id);
+
+      // Filter status=Pending & date=2026-10
+      const resOctPending = await requestJson("/api/leaves/history?status=Pending&date=2026-10", "GET", undefined, userA.token);
+      expect(resOctPending.response.status).toBe(200);
+      expect(resOctPending.body.data).toHaveLength(1);
+      expect(resOctPending.body.data[0].id).toBe(leaveOct.body.data.id);
+    });
+
+    test("returns 400 for invalid query parameters", async () => {
+      const employee = await createUserAndLogin(namespace);
+      const badStatus = await requestJson("/api/leaves/history?status=Unknown", "GET", undefined, employee.token);
+      expect(badStatus.response.status).toBe(400);
+
+      const badDate = await requestJson("/api/leaves/history?date=2026-13", "GET", undefined, employee.token);
+      expect(badDate.response.status).toBe(400);
+
+      const badDateFormat = await requestJson("/api/leaves/history?date=2026-10-15", "GET", undefined, employee.token);
+      expect(badDateFormat.response.status).toBe(400);
+    });
   });
 });
