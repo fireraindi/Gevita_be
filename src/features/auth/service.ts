@@ -4,13 +4,15 @@ import { ForbiddenError, NotFoundError, UnauthorizedError } from "../../errors/e
 import { generateToken } from "../../helpers/token";
 import { getProfilePhotoUrl } from "../../helpers/photo";
 import { validate } from "../../helpers/validate";
+import { checkLoginRateLimit, resetLoginRateLimit } from "../../helpers/rateLimiter";
 import { users } from "../../db/schema";
 import type { LoginRequest } from "./model";
 import { loginSchema } from "./validation";
 
 export async function login(request: LoginRequest): Promise<string> {
-  
   const input = validate(loginSchema, request);
+  checkLoginRateLimit(input.identifier);
+
   const [user] = await db.select({
     id: users.id,
     password: users.password,
@@ -21,12 +23,12 @@ export async function login(request: LoginRequest): Promise<string> {
     .where(or(eq(users.email, input.identifier), eq(users.phone, input.identifier)))
     .limit(1);
 
-
   if (!user || !(await Bun.password.verify(input.password, user.password))) {
     throw new UnauthorizedError("Invalid credentials");
   }
   if (!user.isActive) throw new ForbiddenError("User account is inactive");
 
+  resetLoginRateLimit(input.identifier);
   return generateToken({ id: user.id, role: user.role });
 }
 

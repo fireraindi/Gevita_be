@@ -4,17 +4,13 @@ import { getCurrentUser, login } from "./service";
 import { authMiddleware } from "../../middleware/auth";
 
 async function handleLogin(body: LoginRequest): Promise<AuthResponse> {
-  try {
-    const token = await login(body);
-    return {
-      status: "success",
-      statusCode: 200,
-      message: "Success login user",
-      data: { token },
-    };
-  } catch (error) {
-    throw error;
-  }
+  const token = await login(body);
+  return {
+    status: "success",
+    statusCode: 200,
+    message: "Success login user",
+    data: { token },
+  };
 }
 
 const publicAuthController = new Elysia()

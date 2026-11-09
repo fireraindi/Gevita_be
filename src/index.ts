@@ -2,6 +2,7 @@ import { Elysia } from "elysia";
 import { staticPlugin } from "@elysia/static";
 import { openapi } from "@elysia/openapi";
 
+import { config } from "./config";
 import { errorMiddleware } from "./middleware/error";
 import { protectedUserController, userController } from "./features/user/controller";
 import { authController } from "./features/auth/controller";
@@ -12,8 +13,34 @@ import { seedAdminUser } from "./db/seed-admin";
 
 await seedAdminUser();
 
-const app = new Elysia()
-  .use(openapi({
+let app = new Elysia()
+  .onRequest(({ request, set }) => {
+    // CORS Headers
+    set.headers["Access-Control-Allow-Origin"] = config.CORS_ORIGIN;
+    set.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS";
+    set.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization";
+    set.headers["Access-Control-Allow-Credentials"] = "true";
+
+    // Security Headers
+    set.headers["X-Content-Type-Options"] = "nosniff";
+    set.headers["X-Frame-Options"] = "DENY";
+    set.headers["Referrer-Policy"] = "no-referrer";
+
+    if (request.method === "OPTIONS") {
+      return new Response(null, {
+        status: 204,
+        headers: {
+          "Access-Control-Allow-Origin": config.CORS_ORIGIN,
+          "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type, Authorization",
+          "Access-Control-Allow-Credentials": "true",
+        },
+      });
+    }
+  });
+
+if (config.NODE_ENV !== "production") {
+  app = app.use(openapi({
     path: "/api-docs",
     provider: "swagger-ui",
     exclude: { paths: ["/uploads", "/uploads/*"] },
@@ -41,7 +68,10 @@ const app = new Elysia()
         },
       },
     },
-  }))
+  }));
+}
+
+const server = app
   .use(await staticPlugin({ assets: "uploads", prefix: "/uploads" }))
   .use(errorMiddleware)
   .use(userController)
@@ -57,8 +87,8 @@ const app = new Elysia()
       description: "Memastikan API dapat dijangkau.",
     },
   })
-  .listen(3000);
+  .listen(config.PORT);
 
 console.log(
-  `🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`
+  `🦊 Elysia is running at ${server.server?.hostname}:${server.server?.port}`
 );

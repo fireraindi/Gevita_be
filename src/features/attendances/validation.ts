@@ -1,6 +1,11 @@
 import { z } from "zod";
+import { getCurrentJakartaYear, isValidCalendarDate } from "../../helpers/date";
 import type { AttendanceHistoryQueryInput } from "./model/request";
 import type { CheckInRequest } from "./model/request";
+
+export function isValidAttendanceCalendarDate(value: string): boolean {
+  return isValidCalendarDate(value);
+}
 
 const allowedExtensions = new Set([".jpg", ".jpeg", ".png", ".webp"]);
 const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -19,23 +24,29 @@ export const checkInSchema = z.object({
     }),
 }) satisfies z.ZodType<CheckInRequest>;
 
-const currentYear = Number(new Intl.DateTimeFormat("en", {
-  timeZone: "Asia/Jakarta",
-  year: "numeric",
-}).format(new Date()));
-
-const optionalInteger = (field: string, minimum: number, maximum: number) => z.preprocess(
+const optionalInteger = (field: string, minimum: number, maximum?: number) => z.preprocess(
   (value) => value === "" ? undefined : value,
   z.coerce.number({ error: `${field} must be a number` })
     .int(`${field} must be an integer`)
-    .min(minimum, `${field} must be between ${minimum} and ${maximum}`)
-    .max(maximum, `${field} must be between ${minimum} and ${maximum}`)
+    .min(minimum, maximum !== undefined ? `${field} must be between ${minimum} and ${maximum}` : `${field} must be at least ${minimum}`)
+    .refine((val) => maximum === undefined || val <= maximum, {
+      message: `${field} must be between ${minimum} and ${maximum}`,
+    })
     .optional(),
 );
 
 export const attendanceHistoryQuerySchema = z.object({
   month: optionalInteger("Month", 1, 12),
-  year: optionalInteger("Year", 2000, currentYear + 10),
+  year: z.preprocess(
+    (value) => value === "" ? undefined : value,
+    z.coerce.number({ error: "Year must be a number" })
+      .int("Year must be an integer")
+      .min(2000, "Year must be between 2000 and dynamic year")
+      .refine((val) => val <= getCurrentJakartaYear() + 10, {
+        message: "Year is out of range",
+      })
+      .optional(),
+  ),
   limit: optionalInteger("Limit", 1, 31),
   desc: z.preprocess((value) => {
     if (value === "true") return true;
@@ -48,12 +59,6 @@ export type AttendanceHistoryQuery = z.infer<typeof attendanceHistoryQuerySchema
 
 export const validAttendanceStatuses = ["Hadir", "Terlambat", "Tidak Hadir", "Sakit", "Izin", "Dinas", "Ditolak"] as const;
 export type ValidAttendanceStatus = (typeof validAttendanceStatuses)[number];
-
-export function isValidAttendanceCalendarDate(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const date = new Date(`${value}T00:00:00.000Z`);
-  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
-}
 
 const attendanceDateSchema = z.string().refine(isValidAttendanceCalendarDate, {
   message: "Date must be a valid date in YYYY-MM-DD format",

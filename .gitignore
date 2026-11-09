@@ -47,5 +47,9 @@ prompts
 issues
 
 uploads/profile/*
+!uploads/profile/.gitkeep
+!uploads/profile/profile.webp
 uploads/checkin/*
 !uploads/checkin/.gitkeep
+uploads/leave/*
+!uploads/leave/.gitkeep

@@ -1,35 +1,28 @@
 import { and, asc, count, desc, eq, gte, ilike, isNull, lt, lte, ne } from "drizzle-orm";
-import { mkdir, unlink, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { unlink } from "node:fs/promises";
 import { db } from "../../db";
 import { attendances, leaves, users } from "../../db/schema";
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../errors/errors";
 import { validate } from "../../helpers/validate";
 import { getCheckInPhotoUrl } from "../../helpers/photo";
+import { storeUploadedImage } from "../../helpers/upload";
+import { requireActiveAdmin } from "../../helpers/role";
+import { escapeIlikePattern } from "../../helpers/sql";
+import {
+  formatJakartaTime,
+  getCurrentJakartaDate,
+  getCurrentMonthRange,
+  getDefaultInclusiveMonthRange,
+} from "../../helpers/date";
 import type { AttendanceHistoryQueryInput, CheckInRequest, ListAttendancesQueryInput } from "./model/request";
 import type { AttendanceHistoryItem, AttendanceListItem, AttendanceStatsData, CheckInAttendanceData, CheckOutAttendanceData, PaginationData, RejectAttendanceData, TodayAttendanceData } from "./model/response";
 import { attendanceHistoryQuerySchema, attendanceIdParamSchema, checkInSchema, listAttendancesQuerySchema } from "./validation";
 
-const attendanceTimeZone = "Asia/Jakarta";
-let lastPhotoTimestamp = 0;
-
-export function getCurrentDate(now: Date): string {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: attendanceTimeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(now);
-  const part = (type: string) => parts.find((item) => item.type === type)?.value ?? "";
-  return `${part("year")}-${part("month")}-${part("day")}`;
+export function getCurrentDate(now: Date = new Date()): string {
+  return getCurrentJakartaDate(now);
 }
 
-export function getCurrentMonthRange(now: Date = new Date()): { startDate: string; endDate: string } {
-  const [year, month] = getCurrentDate(now).split("-").map(Number);
-  const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
-  const endDate = new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 10);
-  return { startDate, endDate };
-}
+export { getCurrentMonthRange, getDefaultInclusiveMonthRange };
 
 export async function countUserAttendancesInMonth(userId: string, startDate: string, endDate: string): Promise<number> {
   const [row] = await db.select({ total: count() })
@@ -71,13 +64,9 @@ export async function getAttendanceStats(userId: string): Promise<AttendanceStat
   return { totalAttendance, sickLeave, personalLeave };
 }
 
-export function getCurrentTimestamp(now: Date): Date {
-  return now;
-}
-
 export function determineAttendanceStatus(now: Date): "Hadir" | "Terlambat" {
   const time = new Intl.DateTimeFormat("en-GB", {
-    timeZone: attendanceTimeZone,
+    timeZone: "Asia/Jakarta",
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
@@ -87,35 +76,7 @@ export function determineAttendanceStatus(now: Date): "Hadir" | "Terlambat" {
 }
 
 export function formatTimeOnly(date: Date | null): string | null {
-  if (!date) return null;
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: attendanceTimeZone,
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(date);
-  const part = (type: string) => parts.find((item) => item.type === type)?.value ?? "00";
-  return `${part("hour")}:${part("minute")}:${part("second")}`;
-}
-
-export function getDefaultInclusiveMonthRange(now: Date = new Date()): { startDate: string; endDate: string } {
-  const [year, month] = getCurrentDate(now).split("-").map(Number);
-  const monthText = String(month).padStart(2, "0");
-  const lastDay = new Date(Date.UTC(year!, month!, 0)).getUTCDate();
-  return {
-    startDate: `${year}-${monthText}-01`,
-    endDate: `${year}-${monthText}-${String(lastDay).padStart(2, "0")}`,
-  };
-}
-
-async function requireActiveAdmin(currentUser: { id: string; role: "admin" | "employee" }): Promise<void> {
-  const [account] = await db.select({ role: users.role, isActive: users.is_active })
-    .from(users)
-    .where(eq(users.id, currentUser.id))
-    .limit(1);
-  if (!account?.isActive) throw new ForbiddenError("User account is inactive");
-  if (currentUser.role !== "admin" || account.role !== "admin") throw new ForbiddenError("Forbidden");
+  return formatJakartaTime(date);
 }
 
 export async function listAttendances(
@@ -133,7 +94,7 @@ export async function listAttendances(
     gte(attendances.date, startDate),
     lte(attendances.date, endDate),
   ];
-  if (query.search) conditions.push(ilike(users.name, `%${query.search}%`));
+  if (query.search) conditions.push(ilike(users.name, `%${escapeIlikePattern(query.search)}%`));
   if (query.status) conditions.push(eq(attendances.status, query.status));
   const whereClause = and(...conditions);
   const [countRow] = await db.select({ total: count() })
@@ -277,38 +238,18 @@ export async function checkIn(userId: string, request: CheckInRequest): Promise<
     throw new ConflictError("Already checked in today");
   }
 
-  const extension = checkInPhoto.name.slice(checkInPhoto.name.lastIndexOf(".")).toLowerCase();
-  const directory = join(process.cwd(), "uploads", "checkin");
-  await mkdir(directory, { recursive: true });
-  let timestamp = Math.max(Date.now(), lastPhotoTimestamp + 1);
-  let filename = `${timestamp}${extension}`;
-  let filepath = join(directory, filename);
-  const image = new Uint8Array(await checkInPhoto.arrayBuffer());
-  while (true) {
-    try {
-      await writeFile(filepath, image, { flag: "wx" });
-      lastPhotoTimestamp = timestamp;
-      break;
-    } catch (error) {
-      if (typeof error !== "object" || error === null || !("code" in error) || error.code !== "EEXIST") {
-        throw error;
-      }
-      timestamp += 1;
-      filename = `${timestamp}${extension}`;
-      filepath = join(directory, filename);
-    }
-  }
+  const storedPhoto = await storeUploadedImage("checkin", checkInPhoto);
 
   try {
     return await insertAttendance({
       userId,
       date,
-      checkInTime: getCurrentTimestamp(now),
+      checkInTime: now,
       status: determineAttendanceStatus(now),
-      checkInPhoto: filename,
+      checkInPhoto: storedPhoto.filename,
     });
   } catch (error) {
-    await unlink(filepath).catch(() => undefined);
+    await unlink(storedPhoto.filepath).catch(() => undefined);
     if (isAttendanceUniqueViolation(error)) {
       throw new ConflictError("Already checked in today");
     }

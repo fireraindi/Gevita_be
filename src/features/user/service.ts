@@ -1,46 +1,16 @@
 import { and, desc, eq, ilike, or } from "drizzle-orm";
-import { mkdir, unlink, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { unlink } from "node:fs/promises";
 import { db } from "../../db";
 import { users } from "../../db/schema";
 import { changePasswordSchema, createUserSchema, updateUserSchema, userListQuerySchema } from "./validation";
-import type { UserResponse } from "./model/response";
+import type { UserResponse, UserDetailData, UserListItemData, UpdateUserData } from "./model/response";
 import type { RegisterRequest, UpdateUserRequest } from "./model/request";
 import { validate } from "../../helpers/validate";
-import { BadRequestError, ConflictError, NotFoundError, PasswordMismatchError } from "../../errors/errors";
-import type { ChangePasswordInput } from "./validation";
+import { BadRequestError, ConflictError, NotFoundError } from "../../errors/errors";
+import type { ChangePasswordInput, UserListQuery } from "./validation";
 import { getProfilePhotoUrl } from "../../helpers/photo";
-import type { UserDetailData } from "./model/response";
-import type { UserListItemData } from "./model/response";
-import type { UserListQuery } from "./validation";
-import type { UpdateUserData } from "./model/response";
-
-const extensionByType: Record<string, string> = {
-  "image/jpeg": "jpg",
-  "image/png": "png",
-  "image/webp": "webp",
-};
-
-let lastPhotoTimestamp = 0;
-
-async function storeProfilePhoto(file: File): Promise<{ filename: string; filepath: string }> {
-  const extension = extensionByType[file.type];
-  const directory = join(process.cwd(), "uploads", "profile");
-  await mkdir(directory, { recursive: true });
-  let timestamp = Math.max(Date.now(), lastPhotoTimestamp + 1);
-  while (true) {
-    const filename = `${timestamp}.${extension}`;
-    const filepath = join(directory, filename);
-    try {
-      await writeFile(filepath, new Uint8Array(await file.arrayBuffer()), { flag: "wx" });
-      lastPhotoTimestamp = timestamp;
-      return { filename, filepath };
-    } catch (error) {
-      if (typeof error !== "object" || error === null || !("code" in error) || error.code !== "EEXIST") throw error;
-      timestamp += 1;
-    }
-  }
-}
+import { storeUploadedImage } from "../../helpers/upload";
+import { escapeIlikePattern } from "../../helpers/sql";
 
 export async function createUser(request: RegisterRequest): Promise<UserResponse> {
   const input = validate(createUserSchema, request);
@@ -48,7 +18,7 @@ export async function createUser(request: RegisterRequest): Promise<UserResponse
   let photo = "profile.webp";
   let storedPhoto: { filename: string; filepath: string } | null = null;
   if (input.photo) {
-    storedPhoto = await storeProfilePhoto(input.photo);
+    storedPhoto = await storeUploadedImage("profile", input.photo);
     photo = storedPhoto.filename;
   }
 
@@ -107,7 +77,7 @@ export async function updateUser(userId: string, request: UpdateUserRequest): Pr
 
   const hashedPassword = input.password ? await Bun.password.hash(input.password) : undefined;
   let storedPhoto: { filename: string; filepath: string } | null = null;
-  if (input.photo) storedPhoto = await storeProfilePhoto(input.photo);
+  if (input.photo) storedPhoto = await storeUploadedImage("profile", input.photo);
 
   const updateData: Partial<typeof users.$inferInsert> = { updated_at: new Date() };
   if (input.isActive !== undefined) updateData.is_active = input.isActive;
@@ -179,9 +149,13 @@ export async function getUserById(id: string): Promise<UserDetailData> {
 export async function getUsers(query?: UserListQuery): Promise<UserListItemData[]> {
   const input = query ? validate(userListQuerySchema, query) : {};
   const search = input.search?.trim();
-  const whereClause = search
-    ? or(ilike(users.name, `%${search}%`), ilike(users.phone, `%${search}%`))
+  const escapedSearch = search ? escapeIlikePattern(search) : undefined;
+  const whereClause = escapedSearch
+    ? or(ilike(users.name, `%${escapedSearch}%`), ilike(users.phone, `%${escapedSearch}%`))
     : undefined;
+
+  const page = input.page ?? 1;
+  const limit = input.limit ?? 100;
 
   return db.select({
     id: users.id,
@@ -189,7 +163,12 @@ export async function getUsers(query?: UserListQuery): Promise<UserListItemData[
     phone: users.phone,
     position: users.position,
     isActive: users.is_active,
-  }).from(users).where(whereClause).orderBy(desc(users.created_at));
+  })
+    .from(users)
+    .where(whereClause)
+    .orderBy(desc(users.created_at))
+    .limit(limit)
+    .offset((page - 1) * limit);
 }
 
 export async function changePassword(userId: string, request: ChangePasswordInput): Promise<void> {

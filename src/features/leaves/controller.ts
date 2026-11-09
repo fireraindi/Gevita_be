@@ -68,7 +68,7 @@ export const leavesController = new Elysia({ prefix: "/api/leaves" })
     detail: {
       tags: ["Leaves"],
       summary: "Get leave history",
-      description: "Mengambil riwayat permohonan cuti pengguna yang sedang login dari yang terbaru (created_at DESC, id DESC). Filter status dan bulan (YYYY-MM) opsional; jika date tidak diisi, seluruh riwayat termasuk pengajuan bulan depan akan dikembalikan.",
+      description: "Mengambil riwayat permohonan cuti pengguna yang sedang login dari yang terbaru (created_at DESC, id DESC), dibatasi maksimal 10 data terbaru. Filter status dan bulan (YYYY-MM) opsional; jika date tidak diisi, riwayat terbaru termasuk pengajuan bulan depan akan dikembalikan.",
       security: [{ bearerAuth: [] }],
       parameters: [
         { in: "query", name: "status", required: false, schema: { type: "string", enum: ["Pending", "Approved", "Rejected"] } },
@@ -151,6 +151,11 @@ export const leavesController = new Elysia({ prefix: "/api/leaves" })
         statusCode: t.Literal(401),
         errors: t.Literal("Unauthorized"),
       }),
+      409: t.Object({
+        status: t.Literal("error"),
+        statusCode: t.Literal(409),
+        errors: t.String(),
+      }),
     },
     detail: {
       tags: ["Leaves"],
@@ -187,6 +192,7 @@ export const leavesController = new Elysia({ prefix: "/api/leaves" })
       401: t.Object({ status: t.Literal("error"), statusCode: t.Literal(401), errors: t.Literal("Unauthorized") }),
       403: t.Object({ status: t.Literal("error"), statusCode: t.Literal(403), errors: t.Literal("Forbidden") }),
       404: t.Object({ status: t.Literal("error"), statusCode: t.Literal(404), errors: t.Literal("Leave not found") }),
+      409: t.Object({ status: t.Literal("error"), statusCode: t.Literal(409), errors: t.String() }),
       500: t.Object({ status: t.Literal("error"), statusCode: t.Literal(500), errors: t.Literal("Internal server error") }),
     },
     detail: { tags: ["Leaves"], summary: "Reject leave request", security: [{ bearerAuth: [] }] },
@@ -205,6 +211,7 @@ export const leavesController = new Elysia({ prefix: "/api/leaves" })
       401: t.Object({ status: t.Literal("error"), statusCode: t.Literal(401), errors: t.Literal("Unauthorized") }),
       403: t.Object({ status: t.Literal("error"), statusCode: t.Literal(403), errors: t.Literal("Forbidden") }),
       404: t.Object({ status: t.Literal("error"), statusCode: t.Literal(404), errors: t.Literal("Leave not found") }),
+      409: t.Object({ status: t.Literal("error"), statusCode: t.Literal(409), errors: t.String() }),
       500: t.Object({ status: t.Literal("error"), statusCode: t.Literal(500), errors: t.Literal("Internal server error") }),
     },
     detail: { tags: ["Leaves"], summary: "Approve leave request", security: [{ bearerAuth: [] }] },

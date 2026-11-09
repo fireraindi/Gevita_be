@@ -136,6 +136,7 @@ describe("Leave API", () => {
 
   test.each([
     ["end before start", { endDate: "2026-10-31" }, "endDate", "End date must be greater than or equal to start date"],
+    ["duration over 30 days", { startDate: "2026-11-01", endDate: "2026-12-05" }, "endDate", "Leave duration must not exceed 30 days"],
     ["short reason", { reason: "abc" }, "reason", "Reason must be at least 4 characters"],
     ["invalid category", { category: "Liburan" }, "category", "Category must be either Sakit or Izin"],
     ["invalid calendar date", { startDate: "2026-02-31" }, "startDate", "Date must be a valid date in YYYY-MM-DD format"],
@@ -267,9 +268,20 @@ describe("Leave API", () => {
       user_id: userId, date: "2026-12-20", check_in_time: new Date(), check_in_photo: "existing.webp", status: "Hadir",
     });
     const response = await requestJson(`/api/leaves/${created.body.data.id}/approved`, "PATCH", undefined, adminToken);
-    expect(response.response.status).toBe(500);
+    expect(response.response.status).toBe(409);
+    expect(response.body.errors).toContain("Attendance already exists");
     const [leave] = await testDb.select().from(testLeaves).where(eq(testLeaves.id, created.body.data.id));
     expect(leave?.status).toBe("Pending");
+  });
+
+  test("rejects overlapping leave requests", async () => {
+    const employee = await createUserAndLogin(namespace);
+    const first = await requestForm("/api/leaves", "POST", validForm({ startDate: "2026-11-05", endDate: "2026-11-08" }), employee.token);
+    expect(first.response.status).toBe(201);
+
+    const overlapping = await requestForm("/api/leaves", "POST", validForm({ startDate: "2026-11-07", endDate: "2026-11-10" }), employee.token);
+    expect(overlapping.response.status).toBe(409);
+    expect(overlapping.body.errors).toContain("overlaps with an existing");
   });
 
   test("approved Izin leaves create attendance with Izin status", async () => {
@@ -353,6 +365,24 @@ describe("Leave API", () => {
 
       const badDateFormat = await requestJson("/api/leaves/history?date=2026-10-15", "GET", undefined, employee.token);
       expect(badDateFormat.response.status).toBe(400);
+    });
+
+    test("limits results to the 10 newest records", async () => {
+      const employee = await createUserAndLogin(namespace);
+      for (let i = 1; i <= 12; i++) {
+        const day = String(i).padStart(2, "0");
+        await requestForm("/api/leaves", "POST", validForm({
+          startDate: `2026-05-${day}`,
+          endDate: `2026-05-${day}`,
+          reason: `Keperluan hari ke-${i}`,
+        }), employee.token);
+      }
+
+      const response = await requestJson("/api/leaves/history", "GET", undefined, employee.token);
+      expect(response.response.status).toBe(200);
+      expect(response.body.data).toHaveLength(10);
+      expect(response.body.data[0].reason).toBe("Keperluan hari ke-12");
+      expect(response.body.data[9].reason).toBe("Keperluan hari ke-3");
     });
   });
 });

@@ -1,4 +1,4 @@
-import { boolean, date, integer, pgEnum, pgTable, serial, text, timestamp, unique, varchar } from "drizzle-orm/pg-core";
+import { boolean, date, index, integer, pgEnum, pgTable, serial, text, timestamp, unique, varchar } from "drizzle-orm/pg-core";
 
 export const roleEnum = pgEnum("role", ["admin", "employee"]);
 export const leaveStatusEnum = pgEnum("leave_status", ["Pending", "Approved", "Rejected"]);
@@ -37,7 +37,11 @@ export const leaves = pgTable("leaves", {
   created_at: timestamp("created_at").defaultNow().notNull(),
   updated_at: timestamp("updated_at").defaultNow().notNull(),
   deleted_at: timestamp("deleted_at"),
-});
+}, (table) => [
+  index("leaves_user_id_created_at_idx").on(table.user_id, table.created_at),
+  index("leaves_created_at_idx").on(table.created_at),
+  index("leaves_date_range_idx").on(table.start_date, table.end_date),
+]);
 
 export const attendances = pgTable("attendances", {
   id: serial("id").primaryKey(),
@@ -50,7 +54,10 @@ export const attendances = pgTable("attendances", {
   created_at: timestamp("created_at").defaultNow().notNull(),
   updated_at: timestamp("updated_at").defaultNow().notNull(),
   deleted_at: timestamp("deleted_at"),
-}, (table) => [unique("attendances_user_id_date_unique").on(table.user_id, table.date)]);
+}, (table) => [
+  unique("attendances_user_id_date_unique").on(table.user_id, table.date),
+  index("attendances_date_idx").on(table.date),
+]);
 
 export const jobs = pgTable("jobs", {
   id: serial("id").primaryKey(),
@@ -60,4 +67,6 @@ export const jobs = pgTable("jobs", {
   created_at: timestamp("created_at").defaultNow().notNull(),
   updated_at: timestamp("updated_at").defaultNow().notNull(),
   deleted_at: timestamp("deleted_at"),
-});
+}, (table) => [
+  index("jobs_user_id_idx").on(table.user_id),
+]);

@@ -1,15 +1,11 @@
 import { z } from "zod";
+import { isValidCalendarDate } from "../../helpers/date";
 import type { CreateLeaveRequest, ListLeavesQueryInput } from "./model/request";
+
+export { isValidCalendarDate };
 
 const allowedExtensions = new Set([".jpg", ".jpeg", ".png", ".webp"]);
 const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
-
-export function isValidCalendarDate(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const [year, month, day] = value.split("-").map(Number);
-  const date = new Date(Date.UTC(year!, month! - 1, day!));
-  return date.getUTCFullYear() === year && date.getUTCMonth() === month! - 1 && date.getUTCDate() === day;
-}
 
 const dateSchema = z.string().refine(isValidCalendarDate, "Date must be a valid date in YYYY-MM-DD format");
 const monthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Date must be a valid month in YYYY-MM format");
@@ -30,6 +26,14 @@ export const createLeaveSchema = z.object({
   image: optionalImageSchema,
 }).refine((data) => data.endDate >= data.startDate, {
   message: "End date must be greater than or equal to start date",
+  path: ["endDate"],
+}).refine((data) => {
+  const start = Date.parse(`${data.startDate}T00:00:00.000Z`);
+  const end = Date.parse(`${data.endDate}T00:00:00.000Z`);
+  const days = (end - start) / 86_400_000 + 1;
+  return days <= 30;
+}, {
+  message: "Leave duration must not exceed 30 days",
   path: ["endDate"],
 }) satisfies z.ZodType<CreateLeaveRequest>;
 

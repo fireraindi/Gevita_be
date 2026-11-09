@@ -1,17 +1,18 @@
 import { and, count, desc, eq, gte, ilike, isNull, lte, lt } from "drizzle-orm";
-import { mkdir, unlink, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { unlink } from "node:fs/promises";
 import { db } from "../../db";
 import { attendances, leaves, users } from "../../db/schema";
-import { BadRequestError, ForbiddenError, NotFoundError } from "../../errors/errors";
+import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../errors/errors";
 import { getLeavePhotoUrl } from "../../helpers/photo";
 import { validate } from "../../helpers/validate";
+import { storeUploadedImage } from "../../helpers/upload";
+import { getInclusiveDateRange } from "../../helpers/date";
+import { requireActiveAdmin } from "../../helpers/role";
+import { escapeIlikePattern } from "../../helpers/sql";
 import { createLeaveSchema, leaveHistoryQuerySchema, leaveIdParamSchema, listLeavesQuerySchema } from "./validation";
 import type { LeaveHistoryQuery } from "./validation";
 import type { CreateLeaveRequest, ListLeavesQueryInput } from "./model/request";
 import type { LeaveDetailData, LeaveListItem, LeaveListPagination, LeaveResponseData, UpdateLeaveStatusData } from "./model/response";
-
-let lastLeaveImageTimestamp = 0;
 
 export async function insertLeaveRecord(values: {
   userId: string;
@@ -51,30 +52,42 @@ export async function insertLeaveRecord(values: {
   };
 }
 
-async function storeLeaveImage(file: File): Promise<{ filename: string; filepath: string }> {
-  const extension = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
-  const directory = join(process.cwd(), "uploads", "leave");
-  await mkdir(directory, { recursive: true });
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  let timestamp = Math.max(Date.now(), lastLeaveImageTimestamp + 1);
-  while (true) {
-    const filename = `${timestamp}${extension}`;
-    const filepath = join(directory, filename);
-    try {
-      await writeFile(filepath, bytes, { flag: "wx" });
-      lastLeaveImageTimestamp = timestamp;
-      return { filename, filepath };
-    } catch (error) {
-      if (typeof error !== "object" || error === null || !("code" in error) || error.code !== "EEXIST") throw error;
-      timestamp += 1;
-    }
-  }
-}
-
 export async function createLeave(userId: string, request: CreateLeaveRequest): Promise<LeaveResponseData> {
   const input = validate(createLeaveSchema, request);
+
+  // Prevent overlapping leave requests (BUG-04)
+  const [overlapping] = await db.select({ id: leaves.id })
+    .from(leaves)
+    .where(and(
+      eq(leaves.user_id, userId),
+      isNull(leaves.deleted_at),
+      lte(leaves.start_date, input.endDate),
+      gte(leaves.end_date, input.startDate),
+      eq(leaves.status, "Pending"),
+    ))
+    .limit(1);
+
+  if (overlapping) {
+    throw new ConflictError("Leave request overlaps with an existing pending leave");
+  }
+
+  const [approvedOverlapping] = await db.select({ id: leaves.id })
+    .from(leaves)
+    .where(and(
+      eq(leaves.user_id, userId),
+      isNull(leaves.deleted_at),
+      lte(leaves.start_date, input.endDate),
+      gte(leaves.end_date, input.startDate),
+      eq(leaves.status, "Approved"),
+    ))
+    .limit(1);
+
+  if (approvedOverlapping) {
+    throw new ConflictError("Leave request overlaps with an approved leave");
+  }
+
   const imageFile = input.image instanceof File ? input.image : undefined;
-  const storedImage = imageFile ? await storeLeaveImage(imageFile) : null;
+  const storedImage = imageFile ? await storeUploadedImage("leave", imageFile) : null;
   try {
     return await insertLeaveRecord({
       userId,
@@ -104,7 +117,8 @@ export async function getLeaveHistory(userId: string, query: LeaveHistoryQuery):
 
   const rows = await db.select().from(leaves)
     .where(and(...conditions))
-    .orderBy(desc(leaves.created_at), desc(leaves.id));
+    .orderBy(desc(leaves.created_at), desc(leaves.id))
+    .limit(10);
   return rows.map((row) => ({
     id: row.id,
     startDate: row.start_date,
@@ -117,20 +131,11 @@ export async function getLeaveHistory(userId: string, query: LeaveHistoryQuery):
   }));
 }
 
-async function requireActiveLeaveAdmin(currentUser: { id: string; role: "admin" | "employee" }): Promise<void> {
-  const [account] = await db.select({ role: users.role, isActive: users.is_active })
-    .from(users)
-    .where(eq(users.id, currentUser.id))
-    .limit(1);
-  if (!account?.isActive) throw new ForbiddenError("User account is inactive");
-  if (currentUser.role !== "admin" || account.role !== "admin") throw new ForbiddenError("Forbidden");
-}
-
 export async function listLeaves(
   currentUser: { id: string; role: "admin" | "employee" },
   queryInput: ListLeavesQueryInput,
 ): Promise<{ data: LeaveListItem[]; pagination: LeaveListPagination }> {
-  await requireActiveLeaveAdmin(currentUser);
+  await requireActiveAdmin(currentUser);
   const query = validate(listLeavesQuerySchema, queryInput);
   const conditions = [isNull(leaves.deleted_at)];
   if (query.start_date && query.end_date) {
@@ -139,7 +144,7 @@ export async function listLeaves(
       gte(leaves.end_date, query.start_date),
     );
   }
-  if (query.search) conditions.push(ilike(users.name, `%${query.search}%`));
+  if (query.search) conditions.push(ilike(users.name, `%${escapeIlikePattern(query.search)}%`));
   if (query.category) conditions.push(eq(leaves.category, query.category));
   const whereClause = and(...conditions);
   const [countRow] = await db.select({ total: count() })
@@ -200,17 +205,6 @@ export async function getLeaveDetail(
   };
 }
 
-function getDateRange(startDate: string, endDate: string): string[] {
-  const dates: string[] = [];
-  const current = new Date(`${startDate}T00:00:00Z`);
-  const end = new Date(`${endDate}T00:00:00Z`);
-  while (current <= end) {
-    dates.push(current.toISOString().slice(0, 10));
-    current.setUTCDate(current.getUTCDate() + 1);
-  }
-  return dates;
-}
-
 async function getPendingLeave(leaveId: number) {
   const input = validate(leaveIdParamSchema, { id: leaveId });
   const [leave] = await db.select().from(leaves)
@@ -241,16 +235,34 @@ export async function approveLeave(
 ): Promise<UpdateLeaveStatusData & { status: "Approved" }> {
   if (currentUser.role !== "admin") throw new ForbiddenError("Forbidden");
   const leave = await getPendingLeave(leaveId);
+  const leaveDates = getInclusiveDateRange(leave.start_date, leave.end_date);
+
   return db.transaction(async (tx) => {
+    // Check if attendance already exists for any of the leave dates
+    const existingAttendances = await tx.select({ id: attendances.id, date: attendances.date })
+      .from(attendances)
+      .where(and(
+        eq(attendances.user_id, leave.user_id),
+        gte(attendances.date, leave.start_date),
+        lte(attendances.date, leave.end_date),
+      ));
+
+    const existingDateSet = new Set(existingAttendances.map((a) => a.date));
+    const conflictDate = leaveDates.find((d) => existingDateSet.has(d));
+    if (conflictDate) {
+      throw new ConflictError(`Attendance already exists for date ${conflictDate}`);
+    }
+
     const [updated] = await tx.update(leaves)
       .set({ status: "Approved", updated_at: new Date() })
       .where(and(eq(leaves.id, leave.id), eq(leaves.status, "Pending"), isNull(leaves.deleted_at)))
       .returning({ id: leaves.id, startDate: leaves.start_date, endDate: leaves.end_date, category: leaves.category, status: leaves.status });
     if (!updated) throw new BadRequestError("Leave already processed");
-    await tx.insert(attendances).values(getDateRange(leave.start_date, leave.end_date).map((date) => ({
+
+    await tx.insert(attendances).values(leaveDates.map((date) => ({
       user_id: leave.user_id,
       date,
-      check_in_time: new Date(`${date}T00:00:00Z`),
+      check_in_time: new Date(`${date}T00:00:00+07:00`),
       check_in_photo: "leave.webp",
       status: leave.category,
     })));

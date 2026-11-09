@@ -153,6 +153,7 @@ describe("Attendance API", () => {
   });
 
   test("searches attendances by a partial, case-insensitive employee name and filters pagination totals", async () => {
+    setSystemTime(new Date("2026-10-15T01:00:00.000Z"));
     const firstEmployee = await createUserAndLogin(namespace);
     const firstUserId = verifyToken(firstEmployee.token).id;
     const secondEmployee = await createUserAndLogin(namespace);

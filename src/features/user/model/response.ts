@@ -49,13 +49,12 @@ export interface UserDetailResponse {
 
 export interface UpdateUserData {
   id: string;
-  name?: string;
+  name: string;
   phone: string;
   email: string;
   position: string;
   role: "admin" | "employee";
   isActive: boolean;
-  photo?: string | null;
   createdAt: Date | string;
   salary: number;
   supportSalary: number;

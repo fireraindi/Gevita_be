@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+import { resetLoginRateLimit } from "../src/helpers/rateLimiter";
 import {
   createUserAndLogin,
   isolateApiNamespace,
@@ -16,6 +17,7 @@ const namespace = "auth-suite";
 
 describe("Auth API", () => {
   isolateApiNamespace(namespace);
+  afterEach(() => resetLoginRateLimit());
 
   describe("Login", () => {
     test("logs in with a valid email and password", async () => {
@@ -44,6 +46,16 @@ describe("Auth API", () => {
       const { response, body } = await loginUser(payload.email, "wrong-password");
       expect(response.status).toBe(401);
       expect(body.errors).toBe("Invalid credentials");
+    });
+
+    test("rate limits repeated failed login attempts", async () => {
+      const email = `ratelimit-${crypto.randomUUID()}@example.com`;
+      for (let i = 0; i < 10; i++) {
+        await loginUser(email, "wrong-pass");
+      }
+      const blocked = await loginUser(email, "wrong-pass");
+      expect(blocked.response.status).toBe(429);
+      expect(blocked.body.errors).toContain("Too many login attempts");
     });
 
     test("rejects login for an inactive user", async () => {

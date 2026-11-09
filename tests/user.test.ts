@@ -349,6 +349,11 @@ describe("User API", () => {
       const byPhone = await requestJson("/api/users?search=99998888", "GET", undefined, adminToken);
       expect(byPhone.response.status).toBe(200);
       expect(byPhone.body.data.map((user: { phone: string }) => user.phone)).toEqual([phoneUser.phone]);
+
+      // Wildcard characters % and _ are treated literally
+      const wildcardSearch = await requestJson("/api/users?search=%25", "GET", undefined, adminToken);
+      expect(wildcardSearch.response.status).toBe(200);
+      expect(wildcardSearch.body.data).toEqual([]);
     });
 
     test("returns an empty list when search has no matches", async () => {

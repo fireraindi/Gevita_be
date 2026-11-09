@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import { UnauthorizedError } from "../errors/errors";
+import { config } from "../config";
 
 type TokenPayload = {
   id: string;
@@ -7,7 +8,7 @@ type TokenPayload = {
 };
 
 export function verifyToken(token: string): TokenPayload {
-  const secret = process.env.JWT_SECRET;
+  const secret = process.env.JWT_SECRET || config.JWT_SECRET;
   if (!secret) throw new Error("JWT_SECRET is not configured");
 
   try {
@@ -27,7 +28,7 @@ export function verifyToken(token: string): TokenPayload {
 }
 
 export function generateToken(payload: TokenPayload): string {
-  const secret = process.env.JWT_SECRET;
+  const secret = process.env.JWT_SECRET || config.JWT_SECRET;
   if (!secret) throw new Error("JWT_SECRET is not configured");
 
   return jwt.sign(payload, secret, { expiresIn: "3d" });

@@ -20,3 +20,7 @@ export class NotFoundError extends Error {
 export class PasswordMismatchError extends Error {
   readonly statusCode = 422;
 }
+
+export class TooManyRequestsError extends Error {
+  readonly statusCode = 429;
+}
