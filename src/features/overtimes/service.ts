@@ -193,3 +193,19 @@ export async function getOvertimeById(rawId: number | string): Promise<OvertimeD
     date: record.date,
   };
 }
+
+export async function removeOvertime(rawId: number | string): Promise<void> {
+  const param = validate(overtimeIdParamSchema, { id: rawId });
+  const now = new Date();
+
+  const [deleted] = await db
+    .update(overtimes)
+    .set({
+      deleted_at: now,
+      updated_at: now,
+    })
+    .where(and(eq(overtimes.id, param.id), isNull(overtimes.deleted_at)))
+    .returning({ id: overtimes.id });
+
+  if (!deleted) throw new NotFoundError("Overtime not found");
+}

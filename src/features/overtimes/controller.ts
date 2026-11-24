@@ -1,8 +1,8 @@
 import { Elysia, t } from "elysia";
 import { activeAdminMiddleware } from "../../middleware/admin";
 import type { CreateOvertimeRequest, UpdateOvertimeRequest } from "./model/request";
-import type { CreateOvertimeSuccessResponse, DetailOvertimeSuccessResponse, UpdateOvertimeSuccessResponse } from "./model/response";
-import { createOvertime, getOvertimeById, updateOvertime } from "./service";
+import type { CreateOvertimeSuccessResponse, DeleteOvertimeSuccessResponse, DetailOvertimeSuccessResponse, UpdateOvertimeSuccessResponse } from "./model/response";
+import { createOvertime, getOvertimeById, removeOvertime, updateOvertime } from "./service";
 
 const overtimeDetailDataSchema = t.Object({
   id: t.Number(),
@@ -175,6 +175,34 @@ export const overtimesController = new Elysia({ prefix: "/api/overtimes" })
       tags: ["Overtimes"],
       summary: "Get overtime detail by ID (Admin Only)",
       description: "Mengambil detail satu data lembur berdasarkan ID (tidak termasuk data yang sudah di-soft delete). Hanya dapat diakses oleh admin aktif.",
+      security: [{ bearerAuth: [] }],
+    },
+  })
+  .delete("/:id", async ({ params }): Promise<DeleteOvertimeSuccessResponse> => {
+    await removeOvertime(params.id);
+    return {
+      status: "success",
+      message: "Data lembur berhasil dihapus",
+    };
+  }, {
+    params: t.Object({
+      id: t.String({ description: "Overtime ID" }),
+    }),
+    response: {
+      200: t.Object({
+        status: t.Literal("success"),
+        message: t.Literal("Data lembur berhasil dihapus"),
+      }),
+      400: badRequestErrorSchema,
+      401: unauthorizedErrorSchema,
+      403: forbiddenErrorSchema,
+      404: t.Object({ status: t.Literal("error"), statusCode: t.Literal(404), errors: t.Literal("Overtime not found") }),
+      500: internalServerErrorSchema,
+    },
+    detail: {
+      tags: ["Overtimes"],
+      summary: "Soft delete overtime record (Admin Only)",
+      description: "Menghapus data lembur secara lunak (soft delete) dengan mengisi kolom deleted_at. Hanya dapat diakses oleh admin aktif.",
       security: [{ bearerAuth: [] }],
     },
   });

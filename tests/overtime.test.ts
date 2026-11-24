@@ -744,4 +744,128 @@ describe("Overtime API", () => {
       expect(deletedAdmin.body.errors).toBe("Unauthorized");
     });
   });
+
+  describe("Delete overtime (DELETE /api/overtimes/:id)", () => {
+    test("allows an active admin to soft delete an overtime record", async () => {
+      const user = await registerUser(namespace);
+      const payload = {
+        userId: user.body.data.id,
+        timeFrame: 2,
+        start: "19:00",
+        end: "21:00",
+        description: "Service Ac",
+        date: "2026-11-26",
+      };
+      const created = await requestJson("/api/overtimes", "POST", payload, adminToken);
+      expect(created.response.status).toBe(201);
+
+      const overtimeId = created.body.data.id as number;
+      const { response, body } = await requestJson(`/api/overtimes/${overtimeId}`, "DELETE", undefined, adminToken);
+
+      expect(response.status).toBe(200);
+      expect(body).toEqual({
+        status: "success",
+        message: "Data lembur berhasil dihapus",
+      });
+
+      const [deletedRow] = await testDb
+        .select()
+        .from(testOvertimes)
+        .where(eq(testOvertimes.id, overtimeId))
+        .limit(1);
+      expect(deletedRow).toBeDefined();
+      expect(deletedRow?.deleted_at).toBeInstanceOf(Date);
+
+      // Detail and update must return 404 after soft delete
+      const detailAfter = await requestJson(`/api/overtimes/${overtimeId}`, "GET", undefined, adminToken);
+      expect(detailAfter.response.status).toBe(404);
+      expect(detailAfter.body.errors).toBe("Overtime not found");
+
+      const updateAfter = await requestJson(`/api/overtimes/${overtimeId}`, "PUT", {
+        timeFrame: 2,
+        start: "19:00",
+        end: "21:00",
+        description: "Updated",
+        date: "2026-11-26",
+      }, adminToken);
+      expect(updateAfter.response.status).toBe(404);
+      expect(updateAfter.body.errors).toBe("Overtime not found");
+
+      // Time slot can be recreated after soft delete
+      const recreate = await requestJson("/api/overtimes", "POST", payload, adminToken);
+      expect(recreate.response.status).toBe(201);
+    });
+
+    test("returns 404 when overtime does not exist or has already been soft-deleted", async () => {
+      const missing = await requestJson("/api/overtimes/999999", "DELETE", undefined, adminToken);
+      expect(missing.response.status).toBe(404);
+      expect(missing.body.status).toBe("error");
+      expect(missing.body.statusCode).toBe(404);
+      expect(missing.body.errors).toBe("Overtime not found");
+
+      const user = await registerUser(namespace);
+      const created = await requestJson("/api/overtimes", "POST", {
+        userId: user.body.data.id,
+        timeFrame: 2,
+        start: "19:00",
+        end: "21:00",
+        description: "Service Ac",
+        date: "2026-11-26",
+      }, adminToken);
+      const overtimeId = created.body.data.id as number;
+
+      const firstDelete = await requestJson(`/api/overtimes/${overtimeId}`, "DELETE", undefined, adminToken);
+      expect(firstDelete.response.status).toBe(200);
+
+      const secondDelete = await requestJson(`/api/overtimes/${overtimeId}`, "DELETE", undefined, adminToken);
+      expect(secondDelete.response.status).toBe(404);
+      expect(secondDelete.body.errors).toBe("Overtime not found");
+    });
+
+    test("rejects invalid path parameter id with 400 Bad Request", async () => {
+      for (const badId of ["abc", "0", "-5", "1.5", "99999999999"]) {
+        const res = await requestJson(`/api/overtimes/${badId}`, "DELETE", undefined, adminToken);
+        expect(res.response.status).toBe(400);
+        expect(res.body.status).toBe("error");
+        expect(res.body.statusCode).toBe(400);
+        expect(res.body.errors.id).toBeDefined();
+      }
+    });
+
+    test("enforces active admin authorization and valid JWT token", async () => {
+      const noAuth = await requestJson("/api/overtimes/1", "DELETE");
+      expect(noAuth.response.status).toBe(401);
+      expect(noAuth.body.errors).toBe("Unauthorized");
+
+      const invalidToken = await requestJson("/api/overtimes/1", "DELETE", undefined, "invalid-token");
+      expect(invalidToken.response.status).toBe(401);
+      expect(invalidToken.body.errors).toBe("Unauthorized");
+
+      const employeeToken = jwt.sign({ id: "test-employee", role: "employee" }, String(process.env.JWT_SECRET));
+      const employeeRes = await requestJson("/api/overtimes/1", "DELETE", undefined, employeeToken);
+      expect(employeeRes.response.status).toBe(403);
+      expect(employeeRes.body.errors).toBe("Forbidden");
+
+      const adminPayload = validUser(namespace, { role: "admin" });
+      const createdAdmin = await registerUser(namespace, adminPayload);
+      const login = await loginUser(adminPayload.email, adminPayload.password);
+      const token = login.body.data.token as string;
+      const adminId = createdAdmin.body.data.id as string;
+
+      await testDb.update(testUsers).set({ is_active: false }).where(eq(testUsers.id, adminId));
+      const inactive = await requestJson("/api/overtimes/1", "DELETE", undefined, token);
+      expect(inactive.response.status).toBe(403);
+      expect(inactive.body.errors).toBe("User account is inactive");
+
+      await testDb.update(testUsers).set({ is_active: true, role: "employee" }).where(eq(testUsers.id, adminId));
+      const demoted = await requestJson("/api/overtimes/1", "DELETE", undefined, token);
+      expect(demoted.response.status).toBe(403);
+      expect(demoted.body.errors).toBe("Forbidden");
+
+      const ghostAdminToken = jwt.sign({ id: crypto.randomUUID(), role: "admin" }, String(process.env.JWT_SECRET));
+      const deletedAdmin = await requestJson("/api/overtimes/1", "DELETE", undefined, ghostAdminToken);
+      expect(deletedAdmin.response.status).toBe(401);
+      expect(deletedAdmin.body.errors).toBe("Unauthorized");
+    });
+  });
 });

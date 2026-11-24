@@ -36,3 +36,8 @@ export interface DetailOvertimeSuccessResponse {
   message: "Data lembur berhasil diambil";
   data: OvertimeDetailData;
 }
+
+export interface DeleteOvertimeSuccessResponse {
+  status: "success";
+  message: "Data lembur berhasil dihapus";
+}
