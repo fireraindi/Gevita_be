@@ -5,7 +5,12 @@ export interface CreateJobRequest {
 }
 
 export interface UpdateJobRequest {
-  userId: string;
   name: string;
   salary: number;
+}
+
+export interface ListJobsQueryInput {
+  name?: string;
+  limit?: number | string;
+  page?: number | string;
 }

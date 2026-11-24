@@ -1,12 +1,88 @@
 import { Elysia, t } from "elysia";
 import { assertAdmin } from "../../helpers/role";
 import { authMiddleware } from "../../middleware/auth";
-import type { CreateJobRequest, UpdateJobRequest } from "./model/request";
-import type { CreateJobSuccessResponse, UpdateJobSuccessResponse } from "./model/response";
-import { createJob, updateJob } from "./service";
+import type { CreateJobRequest, ListJobsQueryInput, UpdateJobRequest } from "./model/request";
+import type {
+  CreateJobSuccessResponse,
+  JobListSuccessResponse,
+  RemoveJobSuccessResponse,
+  UpdateJobSuccessResponse,
+} from "./model/response";
+import { createJob, getJobs, removeJob, updateJob } from "./service";
 
 export const jobsController = new Elysia({ prefix: "/api/jobs" })
   .use(authMiddleware)
+  .get("", async ({ query, authUser }): Promise<JobListSuccessResponse> => {
+    assertAdmin(authUser);
+    const result = await getJobs(query as ListJobsQueryInput);
+    return {
+      status: "success",
+      statusCode: 200,
+      message: "Success get jobs",
+      data: result.data,
+      pagination: result.pagination,
+    };
+  }, {
+    response: {
+      200: t.Object({
+        status: t.Literal("success"),
+        statusCode: t.Literal(200),
+        message: t.String(),
+        data: t.Array(
+          t.Object({
+            id: t.Number(),
+            userId: t.String(),
+            userName: t.String(),
+            name: t.String(),
+            salary: t.Number(),
+          }),
+        ),
+        pagination: t.Object({
+          page: t.Number(),
+          limit: t.Number(),
+          total: t.Number(),
+          total_pages: t.Number(),
+        }),
+      }),
+      400: t.Object({
+        status: t.Literal("error"),
+        statusCode: t.Literal(400),
+        errors: t.Union([t.Record(t.String(), t.Array(t.String())), t.String()]),
+      }),
+      401: t.Object({ status: t.Literal("error"), statusCode: t.Literal(401), errors: t.Literal("Unauthorized") }),
+      403: t.Object({ status: t.Literal("error"), statusCode: t.Literal(403), errors: t.Literal("Forbidden") }),
+      500: t.Object({ status: t.Literal("error"), statusCode: t.Literal(500), errors: t.Literal("Internal server error") }),
+    },
+    detail: {
+      tags: ["Jobs"],
+      summary: "Get job list (Admin Only)",
+      description: "Mengambil daftar kategori pekerjaan yang belum dihapus (soft delete), dilengkapi pagination dan filter pencarian nama opsional. Hanya dapat diakses oleh admin.",
+      security: [{ bearerAuth: [] }],
+      parameters: [
+        {
+          in: "query",
+          name: "name",
+          required: false,
+          schema: { type: "string" },
+          description: "Filter berdasarkan nama pekerjaan atau nama karyawan (case-insensitive)",
+        },
+        {
+          in: "query",
+          name: "limit",
+          required: false,
+          schema: { type: "integer", minimum: 1, maximum: 100, default: 20 },
+          description: "Jumlah data per halaman (default: 20, max: 100)",
+        },
+        {
+          in: "query",
+          name: "page",
+          required: false,
+          schema: { type: "integer", minimum: 1, default: 1 },
+          description: "Nomor halaman (default: 1)",
+        },
+      ],
+    },
+  })
   .post("", async ({ body, set, authUser }): Promise<CreateJobSuccessResponse> => {
     assertAdmin(authUser);
     const job = await createJob(body as CreateJobRequest);
@@ -97,9 +173,8 @@ export const jobsController = new Elysia({ prefix: "/api/jobs" })
           "application/json": {
             schema: {
               type: "object",
-              required: ["userId", "name", "salary"],
+              required: ["name", "salary"],
               properties: {
-                userId: { type: "string", description: "Target user ID (UUID)" },
                 name: { type: "string", minLength: 1, maxLength: 100, description: "Job title / category name" },
                 salary: { type: "integer", minimum: 1, description: "Salary in IDR" },
               },
@@ -107,5 +182,40 @@ export const jobsController = new Elysia({ prefix: "/api/jobs" })
           },
         },
       },
+    },
+  })
+  .delete("/:id", async ({ params, authUser }): Promise<RemoveJobSuccessResponse> => {
+    assertAdmin(authUser);
+    await removeJob(params.id);
+    return {
+      status: "success",
+      statusCode: 200,
+      message: "Success Remove job",
+    };
+  }, {
+    params: t.Object({
+      id: t.String({ description: "Job ID" }),
+    }),
+    response: {
+      200: t.Object({
+        status: t.Literal("success"),
+        statusCode: t.Literal(200),
+        message: t.Literal("Success Remove job"),
+      }),
+      400: t.Object({
+        status: t.Literal("error"),
+        statusCode: t.Literal(400),
+        errors: t.Union([t.Record(t.String(), t.Array(t.String())), t.String()]),
+      }),
+      401: t.Object({ status: t.Literal("error"), statusCode: t.Literal(401), errors: t.Literal("Unauthorized") }),
+      403: t.Object({ status: t.Literal("error"), statusCode: t.Literal(403), errors: t.Literal("Forbidden") }),
+      404: t.Object({ status: t.Literal("error"), statusCode: t.Literal(404), errors: t.Literal("Job Not found") }),
+      500: t.Object({ status: t.Literal("error"), statusCode: t.Literal(500), errors: t.Literal("Internal server error") }),
+    },
+    detail: {
+      tags: ["Jobs"],
+      summary: "Soft delete job category (Admin Only)",
+      description: "Menghapus kategori pekerjaan secara lunak (soft delete) dengan mengisi kolom deleted_at. Hanya dapat diakses oleh admin.",
+      security: [{ bearerAuth: [] }],
     },
   });

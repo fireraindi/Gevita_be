@@ -1,4 +1,4 @@
-import { boolean, date, index, integer, pgEnum, pgTable, serial, text, timestamp, unique, varchar } from "drizzle-orm/pg-core";
+import { boolean, date, index, integer, pgEnum, pgTable, serial, text, time, timestamp, unique, varchar } from "drizzle-orm/pg-core";
 
 export const roleEnum = pgEnum("role", ["admin", "employee"]);
 export const leaveStatusEnum = pgEnum("leave_status", ["Pending", "Approved", "Rejected"]);
@@ -69,4 +69,20 @@ export const jobs = pgTable("jobs", {
   deleted_at: timestamp("deleted_at"),
 }, (table) => [
   index("jobs_user_id_idx").on(table.user_id),
+]);
+
+export const overtimes = pgTable("overtimes", {
+  id: serial("id").primaryKey(),
+  user_id: varchar("user_id", { length: 255 }).references(() => users.id).notNull(),
+  time_frame: integer("time_frame").notNull(),
+  start: time("start").notNull(),
+  end: time("end").notNull(),
+  description: text("description").notNull(),
+  date: date("date").notNull(),
+  created_at: timestamp("created_at").defaultNow().notNull(),
+  updated_at: timestamp("updated_at").defaultNow().notNull(),
+  deleted_at: timestamp("deleted_at"),
+}, (table) => [
+  index("overtimes_user_id_idx").on(table.user_id),
+  index("overtimes_date_idx").on(table.date),
 ]);

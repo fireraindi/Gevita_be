@@ -9,6 +9,7 @@ import { authController } from "./features/auth/controller";
 import { attendancesController } from "./features/attendances/controller";
 import { leavesController } from "./features/leaves/controller";
 import { jobsController } from "./features/jobs/controller";
+import { overtimesController } from "./features/overtimes/controller";
 import { seedAdminUser } from "./db/seed-admin";
 
 await seedAdminUser();
@@ -57,6 +58,7 @@ if (config.NODE_ENV !== "production") {
         { name: "Attendances", description: "Pencatatan absensi." },
         { name: "Leaves", description: "Pengajuan dan manajemen cuti/izin pengguna." },
         { name: "Jobs", description: "Pengelolaan job category dan penugasan pekerjaan." },
+        { name: "Overtimes", description: "Pengelolaan data lembur karyawan." },
       ],
       components: {
         securitySchemes: {
@@ -80,6 +82,7 @@ const server = app
   .use(attendancesController)
   .use(leavesController)
   .use(jobsController)
+  .use(overtimesController)
   .get("/", () => "Hello Elysia", {
     detail: {
       tags: ["General"],

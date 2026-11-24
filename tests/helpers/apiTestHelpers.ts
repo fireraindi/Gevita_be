@@ -60,8 +60,9 @@ const [
   { attendancesController },
   { leavesController },
   { jobsController },
+  { overtimesController },
   { errorMiddleware },
-  { users, attendances, leaves, jobs },
+  { users, attendances, leaves, jobs, overtimes },
   jwtModule,
   { verifyToken },
 ] = await Promise.all([
@@ -73,6 +74,7 @@ const [
   import("../../src/features/attendances/controller"),
   import("../../src/features/leaves/controller"),
   import("../../src/features/jobs/controller"),
+  import("../../src/features/overtimes/controller"),
   import("../../src/middleware/error"),
   import("../../src/db/schema"),
   import("jsonwebtoken"),
@@ -86,6 +88,7 @@ export const testUsers = users;
 export const testAttendances = attendances;
 export const testLeaves = leaves;
 export const testJobs = jobs;
+export const testOvertimes = overtimes;
 export const testSql = sql;
 export { eq, inArray, like, verifyToken };
 
@@ -96,7 +99,8 @@ export const api = new Elysia()
   .use(authController)
   .use(attendancesController)
   .use(leavesController)
-  .use(jobsController);
+  .use(jobsController)
+  .use(overtimesController);
 
 let userSequence = 0;
 const temporaryUploadsByNamespace = new Map<string, Set<string>>();
@@ -185,6 +189,7 @@ async function clearNamespace(namespace: string) {
     await testDb.delete(testAttendances).where(inArray(testAttendances.user_id, userIds));
     await testDb.delete(testLeaves).where(inArray(testLeaves.user_id, userIds));
     await testDb.delete(testJobs).where(inArray(testJobs.user_id, userIds));
+    await testDb.delete(testOvertimes).where(inArray(testOvertimes.user_id, userIds));
     await testDb.delete(testUsers).where(inArray(testUsers.id, userIds));
   }
 
