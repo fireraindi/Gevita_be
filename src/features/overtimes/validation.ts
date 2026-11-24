@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { isValidCalendarDate } from "../../helpers/date";
-import type { CreateOvertimeRequest } from "./model/request";
+import type { CreateOvertimeRequest, UpdateOvertimeRequest } from "./model/request";
 
 const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -9,8 +9,7 @@ const toMinutes = (hhmm: string): number => {
   return hours! * 60 + minutes!;
 };
 
-export const createOvertimeSchema = z.object({
-  userId: z.uuid("User ID must be a valid UUID"),
+const overtimeBaseFields = {
   timeFrame: z
     .number({ error: "Time frame must be a number" })
     .int("Time frame must be an integer")
@@ -27,12 +26,18 @@ export const createOvertimeSchema = z.object({
   description: z
     .string({ error: "Description is required" })
     .trim()
-    .min(1, "Description is required"),
+    .min(1, "Description is required")
+    .max(1000, "Description must not exceed 1000 characters"),
   date: z
     .string({ error: "Date is required" })
     .trim()
     .refine(isValidCalendarDate, "Date must be a valid date in YYYY-MM-DD format"),
-}).superRefine((data, ctx) => {
+};
+
+function validateOvertimeSchedule(
+  data: { timeFrame: number; start: string; end: string },
+  ctx: z.RefinementCtx,
+): void {
   if (!timePattern.test(data.start) || !timePattern.test(data.end)) {
     return;
   }
@@ -61,13 +66,34 @@ export const createOvertimeSchema = z.object({
   }
 
   const durationMinutes = toMinutes(data.end) - toMinutes(data.start);
-  if (data.timeFrame * 60 > durationMinutes) {
+  if (data.timeFrame * 60 !== durationMinutes) {
     ctx.addIssue({
       code: "custom",
       path: ["timeFrame"],
-      message: "Time frame must not exceed the duration between start and end time",
+      message: "Time frame must match the duration between start and end time",
     });
   }
-}) satisfies z.ZodType<CreateOvertimeRequest>;
+}
 
+export const overtimeIdParamSchema = z.object({
+  id: z.coerce
+    .number({ error: "Overtime ID must be a number" })
+    .int("Overtime ID must be an integer")
+    .positive("Overtime ID must be a positive integer")
+    .max(2_147_483_647, "Overtime ID is out of range"),
+});
+
+export const createOvertimeSchema = z
+  .object({
+    userId: z.uuid("User ID must be a valid UUID"),
+    ...overtimeBaseFields,
+  })
+  .superRefine((data, ctx) => validateOvertimeSchedule(data, ctx)) satisfies z.ZodType<CreateOvertimeRequest>;
+
+export const updateOvertimeSchema = z
+  .object(overtimeBaseFields)
+  .superRefine((data, ctx) => validateOvertimeSchedule(data, ctx)) satisfies z.ZodType<UpdateOvertimeRequest>;
+
+export type OvertimeIdParam = z.infer<typeof overtimeIdParamSchema>;
 export type CreateOvertimeInput = z.infer<typeof createOvertimeSchema>;
+export type UpdateOvertimeInput = z.infer<typeof updateOvertimeSchema>;

@@ -14,3 +14,9 @@ export interface CreateOvertimeSuccessResponse {
   message: "Data lembur berhasil dibuat";
   data: OvertimeResponseData;
 }
+
+export interface UpdateOvertimeSuccessResponse {
+  status: "success";
+  message: "Data lembur berhasil diperbarui";
+  data: OvertimeResponseData;
+}
