@@ -4,7 +4,7 @@ import { overtimes, users } from "../../db/schema";
 import { BadRequestError, ConflictError, NotFoundError } from "../../errors/errors";
 import { validate } from "../../helpers/validate";
 import type { CreateOvertimeRequest, UpdateOvertimeRequest } from "./model/request";
-import type { OvertimeResponseData } from "./model/response";
+import type { OvertimeDetailData, OvertimeResponseData } from "./model/response";
 import { createOvertimeSchema, overtimeIdParamSchema, updateOvertimeSchema } from "./validation";
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -162,4 +162,34 @@ export async function updateOvertime(
 
     return toOvertimeResponseData(updated);
   });
+}
+
+export async function getOvertimeById(rawId: number | string): Promise<OvertimeDetailData> {
+  const param = validate(overtimeIdParamSchema, { id: rawId });
+
+  const [record] = await db
+    .select({
+      id: overtimes.id,
+      userId: overtimes.user_id,
+      timeFrame: overtimes.time_frame,
+      start: overtimes.start,
+      end: overtimes.end,
+      description: overtimes.description,
+      date: overtimes.date,
+    })
+    .from(overtimes)
+    .where(and(eq(overtimes.id, param.id), isNull(overtimes.deleted_at)))
+    .limit(1);
+
+  if (!record) throw new NotFoundError("Overtime not found");
+
+  return {
+    id: record.id,
+    userId: record.userId,
+    timeFrame: record.timeFrame,
+    start: formatTimeHHMM(record.start),
+    end: formatTimeHHMM(record.end),
+    description: record.description,
+    date: record.date,
+  };
 }

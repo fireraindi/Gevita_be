@@ -1,10 +1,10 @@
 import { Elysia, t } from "elysia";
 import { activeAdminMiddleware } from "../../middleware/admin";
 import type { CreateOvertimeRequest, UpdateOvertimeRequest } from "./model/request";
-import type { CreateOvertimeSuccessResponse, UpdateOvertimeSuccessResponse } from "./model/response";
-import { createOvertime, updateOvertime } from "./service";
+import type { CreateOvertimeSuccessResponse, DetailOvertimeSuccessResponse, UpdateOvertimeSuccessResponse } from "./model/response";
+import { createOvertime, getOvertimeById, updateOvertime } from "./service";
 
-const overtimeDataSchema = t.Object({
+const overtimeDetailDataSchema = t.Object({
   id: t.Number(),
   userId: t.String(),
   timeFrame: t.Number(),
@@ -12,6 +12,10 @@ const overtimeDataSchema = t.Object({
   end: t.String(),
   description: t.String(),
   date: t.String(),
+});
+
+const overtimeDataSchema = t.Object({
+  ...overtimeDetailDataSchema.properties,
   createdAt: t.String(),
 });
 
@@ -142,5 +146,35 @@ export const overtimesController = new Elysia({ prefix: "/api/overtimes" })
           },
         },
       },
+    },
+  })
+  .get("/:id", async ({ params }): Promise<DetailOvertimeSuccessResponse> => {
+    const data = await getOvertimeById(params.id);
+    return {
+      status: "success",
+      message: "Data lembur berhasil diambil",
+      data,
+    };
+  }, {
+    params: t.Object({
+      id: t.String({ description: "Overtime ID" }),
+    }),
+    response: {
+      200: t.Object({
+        status: t.Literal("success"),
+        message: t.Literal("Data lembur berhasil diambil"),
+        data: overtimeDetailDataSchema,
+      }),
+      400: badRequestErrorSchema,
+      401: unauthorizedErrorSchema,
+      403: forbiddenErrorSchema,
+      404: t.Object({ status: t.Literal("error"), statusCode: t.Literal(404), errors: t.Literal("Overtime not found") }),
+      500: internalServerErrorSchema,
+    },
+    detail: {
+      tags: ["Overtimes"],
+      summary: "Get overtime detail by ID (Admin Only)",
+      description: "Mengambil detail satu data lembur berdasarkan ID (tidak termasuk data yang sudah di-soft delete). Hanya dapat diakses oleh admin aktif.",
+      security: [{ bearerAuth: [] }],
     },
   });

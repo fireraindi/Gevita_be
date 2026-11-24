@@ -20,3 +20,19 @@ export interface UpdateOvertimeSuccessResponse {
   message: "Data lembur berhasil diperbarui";
   data: OvertimeResponseData;
 }
+
+export interface OvertimeDetailData {
+  id: number;
+  userId: string;
+  timeFrame: number;
+  start: string;
+  end: string;
+  description: string;
+  date: string;
+}
+
+export interface DetailOvertimeSuccessResponse {
+  status: "success";
+  message: "Data lembur berhasil diambil";
+  data: OvertimeDetailData;
+}
