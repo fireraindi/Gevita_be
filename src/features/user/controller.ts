@@ -5,7 +5,7 @@ import type { RegisterUserResponse } from "./model/response";
 import type { UserDetailResponse } from "./model/response";
 import type { UserListResponse } from "./model/response";
 import { authMiddleware } from "../../middleware/auth";
-import { assertAdmin } from "../../helpers/role";
+import { activeAdminMiddleware } from "../../middleware/admin";
 import type { ChangePasswordInput } from "./validation";
 import type { UpdateUserRequest } from "./model/request";
 import type { UpdateUserResponse } from "./model/response";
@@ -31,10 +31,9 @@ const updateUserOpenApiSchema = {
   } as const,
 };
 
-export const userController = new Elysia({ prefix: "/api/users" }).use(authMiddleware).post(
+export const userController = new Elysia({ prefix: "/api/users" }).use(activeAdminMiddleware).post(
   "",
-  async ({ body, set, authUser }): Promise<RegisterUserResponse> => {
-    assertAdmin(authUser);
+  async ({ body, set }): Promise<RegisterUserResponse> => {
     const user = await createUser(body as RegisterRequest);
     set.status = 201;
     return { status: "success", statusCode: 201, message: "Success create user", data: user };
@@ -117,10 +116,9 @@ export const userController = new Elysia({ prefix: "/api/users" }).use(authMiddl
   },
 );
 
-export const protectedUserController = new Elysia({ prefix: "/api/users" })
-  .use(authMiddleware)
-  .get("", async ({ authUser, query }): Promise<UserListResponse> => {
-    assertAdmin(authUser);
+const adminProtectedUserRoutes = new Elysia()
+  .use(activeAdminMiddleware)
+  .get("", async ({ query }): Promise<UserListResponse> => {
     const userList = await getUsers(query);
     return {
       status: "success",
@@ -146,7 +144,7 @@ export const protectedUserController = new Elysia({ prefix: "/api/users" })
         })),
       }),
       401: t.Object({ status: t.Literal("error"), statusCode: t.Literal(401), errors: t.Literal("Unauthorized") }),
-      403: t.Object({ status: t.Literal("error"), statusCode: t.Literal(403), errors: t.Literal("Forbidden") }),
+      403: t.Object({ status: t.Literal("error"), statusCode: t.Literal(403), errors: t.String() }),
       500: t.Object({ status: t.Literal("error"), statusCode: t.Literal(500), errors: t.Literal("Internal server error") }),
     },
     detail: {
@@ -156,8 +154,7 @@ export const protectedUserController = new Elysia({ prefix: "/api/users" })
       security: [{ bearerAuth: [] }],
     },
   })
-  .get("/:id", async ({ authUser, params }): Promise<UserDetailResponse> => {
-    assertAdmin(authUser);
+  .get("/:id", async ({ params }): Promise<UserDetailResponse> => {
     const user = await getUserById(params.id);
     return {
       status: "success",
@@ -191,7 +188,7 @@ export const protectedUserController = new Elysia({ prefix: "/api/users" })
         }),
       }),
       401: t.Object({ status: t.Literal("error"), statusCode: t.Literal(401), errors: t.Literal("Unauthorized") }),
-      403: t.Object({ status: t.Literal("error"), statusCode: t.Literal(403), errors: t.Literal("Forbidden") }),
+      403: t.Object({ status: t.Literal("error"), statusCode: t.Literal(403), errors: t.String() }),
       404: t.Object({ status: t.Literal("error"), statusCode: t.Literal(404), errors: t.Literal("User Not found") }),
       500: t.Object({ status: t.Literal("error"), statusCode: t.Literal(500), errors: t.Literal("Internal server error") }),
     },
@@ -202,8 +199,7 @@ export const protectedUserController = new Elysia({ prefix: "/api/users" })
       security: [{ bearerAuth: [] }],
     },
   })
-  .patch("/:id", async ({ authUser, params, body }): Promise<UpdateUserResponse> => {
-    assertAdmin(authUser);
+  .patch("/:id", async ({ params, body }): Promise<UpdateUserResponse> => {
     const user = await updateUser(params.id, body as UpdateUserRequest);
     return { status: "success", statusCode: 200, message: "Success update user", data: user };
   }, {
@@ -220,7 +216,7 @@ export const protectedUserController = new Elysia({ prefix: "/api/users" })
       }),
       400: t.Object({ status: t.Literal("error"), statusCode: t.Literal(400), errors: t.Record(t.String(), t.Array(t.String())) }),
       401: t.Object({ status: t.Literal("error"), statusCode: t.Literal(401), errors: t.Literal("Unauthorized") }),
-      403: t.Object({ status: t.Literal("error"), statusCode: t.Literal(403), errors: t.Literal("Forbidden") }),
+      403: t.Object({ status: t.Literal("error"), statusCode: t.Literal(403), errors: t.String() }),
       404: t.Object({ status: t.Literal("error"), statusCode: t.Literal(404), errors: t.Literal("User Not found") }),
       409: t.Object({ status: t.Literal("error"), statusCode: t.Literal(409), errors: t.Literal("(email/phone) already exist") }),
       500: t.Object({ status: t.Literal("error"), statusCode: t.Literal(500), errors: t.Literal("Internal server error") }),
@@ -237,7 +233,11 @@ export const protectedUserController = new Elysia({ prefix: "/api/users" })
         },
       },
     },
-  })
+  });
+
+export const protectedUserController = new Elysia({ prefix: "/api/users" })
+  .use(adminProtectedUserRoutes)
+  .use(authMiddleware)
   .put("", async ({ body, authUser }) => {
     await changePassword(authUser.id, body as ChangePasswordInput);
     return { status: "success" as const, statusCode: 200 as const, message: "Success update password user" };

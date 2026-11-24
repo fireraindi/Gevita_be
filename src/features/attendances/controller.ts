@@ -1,11 +1,12 @@
 import { Elysia, t } from "elysia";
+import { activeAdminMiddleware } from "../../middleware/admin";
 import { authMiddleware } from "../../middleware/auth";
 import { checkIn, checkOut, getAttendanceHistory, getAttendanceStats, getTodayAttendance, listAttendances, rejectAttendance } from "./service";
 import type { AttendanceHistoryQueryInput, CheckInRequest, ListAttendancesQueryInput } from "./model/request";
 import type { AttendanceHistoryResponse, AttendanceStatsResponse, CheckInResponse, CheckOutResponse, ListAttendancesResponse, RejectAttendanceResponse } from "./model/response";
 
-export const attendancesController = new Elysia({ prefix: "/api/attendances" })
-  .use(authMiddleware)
+const adminAttendanceRoutes = new Elysia()
+  .use(activeAdminMiddleware)
   .get("", async ({ authUser, query }): Promise<ListAttendancesResponse> => {
     const result = await listAttendances(authUser, query as ListAttendancesQueryInput);
     return {
@@ -99,7 +100,11 @@ export const attendancesController = new Elysia({ prefix: "/api/attendances" })
       description: "Menolak absensi karyawan dengan mengubah status menjadi Ditolak. Attendance yang sudah ditolak tidak dapat di-reject kembali.",
       security: [{ bearerAuth: [] }],
     },
-  })
+  });
+
+export const attendancesController = new Elysia({ prefix: "/api/attendances" })
+  .use(adminAttendanceRoutes)
+  .use(authMiddleware)
   .get("/stats", async ({ authUser }): Promise<AttendanceStatsResponse> => ({
     status: "success",
     statusCode: 200,

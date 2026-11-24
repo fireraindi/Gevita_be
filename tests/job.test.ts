@@ -4,10 +4,13 @@ import {
   adminToken,
   isolateApiNamespace,
   jwt,
+  loginUser,
   registerUser,
   requestJson,
   testDb,
   testJobs,
+  testUsers,
+  validUser,
 } from "./helpers/apiTestHelpers";
 
 const namespace = "job-suite";
@@ -470,6 +473,40 @@ describe("Job API", () => {
       const invalid = await requestJson("/api/jobs", "GET", undefined, "invalid-token");
       expect(invalid.response.status).toBe(401);
       expect(invalid.body.errors).toBe("Unauthorized");
+    });
+
+    test("rejects inactive or demoted admins across all job endpoints", async () => {
+      const adminPayload = validUser(namespace, { role: "admin" });
+      const createdAdmin = await registerUser(namespace, adminPayload);
+      const login = await loginUser(adminPayload.email, adminPayload.password);
+      const token = login.body.data.token as string;
+      const adminId = createdAdmin.body.data.id as string;
+
+      // Inactive admin
+      await testDb.update(testUsers).set({ is_active: false }).where(eq(testUsers.id, adminId));
+      for (const [path, method, body] of [
+        ["/api/jobs", "GET", undefined],
+        ["/api/jobs", "POST", { userId: adminId, name: "QC", salary: 100000 }],
+        ["/api/jobs/1", "PUT", { name: "QC Updated", salary: 120000 }],
+        ["/api/jobs/1", "DELETE", undefined],
+      ] as const) {
+        const res = await requestJson(path, method, body, token);
+        expect(res.response.status).toBe(403);
+        expect(res.body.errors).toBe("User account is inactive");
+      }
+
+      // Demoted admin
+      await testDb.update(testUsers).set({ is_active: true, role: "employee" }).where(eq(testUsers.id, adminId));
+      for (const [path, method, body] of [
+        ["/api/jobs", "GET", undefined],
+        ["/api/jobs", "POST", { userId: adminId, name: "QC", salary: 100000 }],
+        ["/api/jobs/1", "PUT", { name: "QC Updated", salary: 120000 }],
+        ["/api/jobs/1", "DELETE", undefined],
+      ] as const) {
+        const res = await requestJson(path, method, body, token);
+        expect(res.response.status).toBe(403);
+        expect(res.body.errors).toBe("Forbidden");
+      }
     });
   });
 });

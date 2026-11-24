@@ -92,6 +92,29 @@ export const testOvertimes = overtimes;
 export const testSql = sql;
 export { eq, inArray, like, verifyToken };
 
+await testDb
+  .insert(testUsers)
+  .values({
+    id: "test-admin",
+    name: "System Test Admin",
+    email: "test-admin@system.local",
+    phone: "6280000000000",
+    password: "hashed-test-admin-password",
+    position: "Administrator",
+    role: "admin",
+    is_active: true,
+    salary: 5000000,
+    support_salary: 500000,
+    overtime_salary: 50000,
+    pocket_money: 500000,
+    bank: "BCA",
+    account_number: "0000000000",
+  })
+  .onConflictDoUpdate({
+    target: testUsers.id,
+    set: { role: "admin", is_active: true },
+  });
+
 export const api = new Elysia()
   .use(errorMiddleware)
   .use(userController)

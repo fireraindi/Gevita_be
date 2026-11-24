@@ -1,14 +1,12 @@
 import { Elysia, t } from "elysia";
-import { assertAdmin } from "../../helpers/role";
-import { authMiddleware } from "../../middleware/auth";
+import { activeAdminMiddleware } from "../../middleware/admin";
 import type { CreateOvertimeRequest } from "./model/request";
 import type { CreateOvertimeSuccessResponse } from "./model/response";
 import { createOvertime } from "./service";
 
 export const overtimesController = new Elysia({ prefix: "/api/overtimes" })
-  .use(authMiddleware)
-  .post("", async ({ body, set, authUser }): Promise<CreateOvertimeSuccessResponse> => {
-    assertAdmin(authUser);
+  .use(activeAdminMiddleware)
+  .post("", async ({ body, set }): Promise<CreateOvertimeSuccessResponse> => {
     const data = await createOvertime(body as CreateOvertimeRequest);
     set.status = 201;
     return {
@@ -38,8 +36,9 @@ export const overtimesController = new Elysia({ prefix: "/api/overtimes" })
         errors: t.Union([t.Record(t.String(), t.Array(t.String())), t.String()]),
       }),
       401: t.Object({ status: t.Literal("error"), statusCode: t.Literal(401), errors: t.Literal("Unauthorized") }),
-      403: t.Object({ status: t.Literal("error"), statusCode: t.Literal(403), errors: t.Literal("Forbidden") }),
+      403: t.Object({ status: t.Literal("error"), statusCode: t.Literal(403), errors: t.String() }),
       404: t.Object({ status: t.Literal("error"), statusCode: t.Literal(404), errors: t.Literal("User not found") }),
+      409: t.Object({ status: t.Literal("error"), statusCode: t.Literal(409), errors: t.String() }),
       500: t.Object({ status: t.Literal("error"), statusCode: t.Literal(500), errors: t.Literal("Internal server error") }),
     },
     detail: {

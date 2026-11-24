@@ -321,8 +321,9 @@ describe("User API", () => {
       expect(response.status).toBe(200);
       expect(body.status).toBe("success");
       expect(body.message).toBe("Success get users");
-      expect(body.data).toHaveLength(2);
-      expect(body.data.map((user: { name: string }) => user.name).sort()).toEqual([userA.name, userB.name].sort());
+      const returnedNames = body.data.map((user: { name: string }) => user.name);
+      expect(returnedNames).toContain(userA.name);
+      expect(returnedNames).toContain(userB.name);
       for (const user of body.data) {
         expect(user).toHaveProperty("id");
         expect(user).toHaveProperty("name");
@@ -378,6 +379,40 @@ describe("User API", () => {
       const invalid = await requestJson("/api/users", "GET", undefined, "invalid-token");
       expect(invalid.response.status).toBe(401);
       expect(invalid.body.errors).toBe("Unauthorized");
+    });
+
+    test("rejects inactive or demoted admins across admin-only user endpoints", async () => {
+      const adminPayload = validUser(namespace, { role: "admin" });
+      const createdAdmin = await registerUser(namespace, adminPayload);
+      const login = await loginUser(adminPayload.email, adminPayload.password);
+      const token = login.body.data.token as string;
+      const adminId = createdAdmin.body.data.id as string;
+
+      // Inactive admin
+      await testDb.update(testUsers).set({ is_active: false }).where(eq(testUsers.id, adminId));
+      for (const [path, method, body] of [
+        ["/api/users", "GET", undefined],
+        [`/api/users/${adminId}`, "GET", undefined],
+        ["/api/users", "POST", validUser(namespace)],
+        [`/api/users/${adminId}`, "PATCH", { name: "Updated Name" }],
+      ] as const) {
+        const res = await requestJson(path, method, body, token);
+        expect(res.response.status).toBe(403);
+        expect(res.body.errors).toBe("User account is inactive");
+      }
+
+      // Demoted admin (active but role changed to employee)
+      await testDb.update(testUsers).set({ is_active: true, role: "employee" }).where(eq(testUsers.id, adminId));
+      for (const [path, method, body] of [
+        ["/api/users", "GET", undefined],
+        [`/api/users/${adminId}`, "GET", undefined],
+        ["/api/users", "POST", validUser(namespace)],
+        [`/api/users/${adminId}`, "PATCH", { name: "Updated Name" }],
+      ] as const) {
+        const res = await requestJson(path, method, body, token);
+        expect(res.response.status).toBe(403);
+        expect(res.body.errors).toBe("Forbidden");
+      }
     });
   });
 });

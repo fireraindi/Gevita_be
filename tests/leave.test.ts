@@ -385,4 +385,46 @@ describe("Leave API", () => {
       expect(response.body.data[9].reason).toBe("Keperluan hari ke-3");
     });
   });
+
+  describe("Active admin verification across leave endpoints", () => {
+    test("rejects inactive or demoted admins on detail, approve, and reject endpoints", async () => {
+      const employee = await createUserAndLogin(namespace);
+      const leaveRes = await requestForm("/api/leaves", "POST", validForm(), employee.token);
+      const leaveId = leaveRes.body.data.id as number;
+
+      const admin = await createAdminAndLogin();
+      const adminId = verifyToken(admin.token).id;
+
+      // Inactive admin
+      await testDb.update(testUsers).set({ is_active: false }).where(eq(testUsers.id, adminId));
+      for (const [path, method] of [
+        [`/api/leaves/${leaveId}`, "GET"],
+        [`/api/leaves/${leaveId}/approved`, "PATCH"],
+        [`/api/leaves/${leaveId}/rejected`, "PATCH"],
+      ] as const) {
+        const res = await requestJson(path, method, undefined, admin.token);
+        expect(res.response.status).toBe(403);
+        expect(res.body.errors).toBe("User account is inactive");
+      }
+
+      // Demoted admin
+      await testDb.update(testUsers).set({ is_active: true, role: "employee" }).where(eq(testUsers.id, adminId));
+      for (const [path, method] of [
+        [`/api/leaves/${leaveId}`, "GET"],
+        [`/api/leaves/${leaveId}/approved`, "PATCH"],
+        [`/api/leaves/${leaveId}/rejected`, "PATCH"],
+      ] as const) {
+        const res = await requestJson(path, method, undefined, admin.token);
+        expect(res.response.status).toBe(403);
+        expect(res.body.errors).toBe("Forbidden");
+      }
+
+      // Inactive employee blocked by authMiddleware on employee endpoints
+      const employeeId = verifyToken(employee.token).id;
+      await testDb.update(testUsers).set({ is_active: false }).where(eq(testUsers.id, employeeId));
+      const inactiveHistory = await requestJson("/api/leaves/history", "GET", undefined, employee.token);
+      expect(inactiveHistory.response.status).toBe(403);
+      expect(inactiveHistory.body.errors).toBe("User account is inactive");
+    });
+  });
 });

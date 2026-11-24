@@ -1,6 +1,5 @@
 import { Elysia, t } from "elysia";
-import { assertAdmin } from "../../helpers/role";
-import { authMiddleware } from "../../middleware/auth";
+import { activeAdminMiddleware } from "../../middleware/admin";
 import type { CreateJobRequest, ListJobsQueryInput, UpdateJobRequest } from "./model/request";
 import type {
   CreateJobSuccessResponse,
@@ -11,9 +10,8 @@ import type {
 import { createJob, getJobs, removeJob, updateJob } from "./service";
 
 export const jobsController = new Elysia({ prefix: "/api/jobs" })
-  .use(authMiddleware)
-  .get("", async ({ query, authUser }): Promise<JobListSuccessResponse> => {
-    assertAdmin(authUser);
+  .use(activeAdminMiddleware)
+  .get("", async ({ query }): Promise<JobListSuccessResponse> => {
     const result = await getJobs(query as ListJobsQueryInput);
     return {
       status: "success",
@@ -50,7 +48,7 @@ export const jobsController = new Elysia({ prefix: "/api/jobs" })
         errors: t.Union([t.Record(t.String(), t.Array(t.String())), t.String()]),
       }),
       401: t.Object({ status: t.Literal("error"), statusCode: t.Literal(401), errors: t.Literal("Unauthorized") }),
-      403: t.Object({ status: t.Literal("error"), statusCode: t.Literal(403), errors: t.Literal("Forbidden") }),
+      403: t.Object({ status: t.Literal("error"), statusCode: t.Literal(403), errors: t.String() }),
       500: t.Object({ status: t.Literal("error"), statusCode: t.Literal(500), errors: t.Literal("Internal server error") }),
     },
     detail: {
@@ -83,8 +81,7 @@ export const jobsController = new Elysia({ prefix: "/api/jobs" })
       ],
     },
   })
-  .post("", async ({ body, set, authUser }): Promise<CreateJobSuccessResponse> => {
-    assertAdmin(authUser);
+  .post("", async ({ body, set }): Promise<CreateJobSuccessResponse> => {
     const job = await createJob(body as CreateJobRequest);
     set.status = 201;
     return { status: "success", message: "Create job success", data: job };
@@ -101,7 +98,7 @@ export const jobsController = new Elysia({ prefix: "/api/jobs" })
         errors: t.Union([t.Record(t.String(), t.Array(t.String())), t.String()]),
       }),
       401: t.Object({ status: t.Literal("error"), statusCode: t.Literal(401), errors: t.Literal("Unauthorized") }),
-      403: t.Object({ status: t.Literal("error"), statusCode: t.Literal(403), errors: t.Literal("Forbidden") }),
+      403: t.Object({ status: t.Literal("error"), statusCode: t.Literal(403), errors: t.String() }),
       404: t.Object({ status: t.Literal("error"), statusCode: t.Literal(404), errors: t.Literal("User not found") }),
       500: t.Object({ status: t.Literal("error"), statusCode: t.Literal(500), errors: t.Literal("Internal server error") }),
     },
@@ -128,8 +125,7 @@ export const jobsController = new Elysia({ prefix: "/api/jobs" })
       },
     },
   })
-  .put("/:id", async ({ params, body, authUser }): Promise<UpdateJobSuccessResponse> => {
-    assertAdmin(authUser);
+  .put("/:id", async ({ params, body }): Promise<UpdateJobSuccessResponse> => {
     const job = await updateJob(params.id, body as UpdateJobRequest);
     return {
       status: "success",
@@ -158,7 +154,7 @@ export const jobsController = new Elysia({ prefix: "/api/jobs" })
         errors: t.Union([t.Record(t.String(), t.Array(t.String())), t.String()]),
       }),
       401: t.Object({ status: t.Literal("error"), statusCode: t.Literal(401), errors: t.Literal("Unauthorized") }),
-      403: t.Object({ status: t.Literal("error"), statusCode: t.Literal(403), errors: t.Literal("Forbidden") }),
+      403: t.Object({ status: t.Literal("error"), statusCode: t.Literal(403), errors: t.String() }),
       404: t.Object({ status: t.Literal("error"), statusCode: t.Literal(404), errors: t.String() }),
       500: t.Object({ status: t.Literal("error"), statusCode: t.Literal(500), errors: t.Literal("Internal server error") }),
     },
@@ -184,8 +180,7 @@ export const jobsController = new Elysia({ prefix: "/api/jobs" })
       },
     },
   })
-  .delete("/:id", async ({ params, authUser }): Promise<RemoveJobSuccessResponse> => {
-    assertAdmin(authUser);
+  .delete("/:id", async ({ params }): Promise<RemoveJobSuccessResponse> => {
     await removeJob(params.id);
     return {
       status: "success",
@@ -208,7 +203,7 @@ export const jobsController = new Elysia({ prefix: "/api/jobs" })
         errors: t.Union([t.Record(t.String(), t.Array(t.String())), t.String()]),
       }),
       401: t.Object({ status: t.Literal("error"), statusCode: t.Literal(401), errors: t.Literal("Unauthorized") }),
-      403: t.Object({ status: t.Literal("error"), statusCode: t.Literal(403), errors: t.Literal("Forbidden") }),
+      403: t.Object({ status: t.Literal("error"), statusCode: t.Literal(403), errors: t.String() }),
       404: t.Object({ status: t.Literal("error"), statusCode: t.Literal(404), errors: t.Literal("Job Not found") }),
       500: t.Object({ status: t.Literal("error"), statusCode: t.Literal(500), errors: t.Literal("Internal server error") }),
     },

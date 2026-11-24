@@ -1,12 +1,13 @@
 import { Elysia, t } from "elysia";
+import { activeAdminMiddleware } from "../../middleware/admin";
 import { authMiddleware } from "../../middleware/auth";
 import type { CreateLeaveRequest, ListLeavesQueryInput } from "./model/request";
 import type { ApproveLeaveStatusResponse, CreateLeaveSuccessResponse, LeaveDetailResponse, LeaveHistoryResponse, LeaveListResponse, RejectLeaveStatusResponse } from "./model/response";
 import { approveLeave, createLeave, getLeaveDetail, getLeaveHistory, listLeaves, rejectLeave } from "./service";
 import type { LeaveHistoryQuery } from "./validation";
 
-export const leavesController = new Elysia({ prefix: "/api/leaves" })
-  .use(authMiddleware)
+const adminLeaveRoutes = new Elysia()
+  .use(activeAdminMiddleware)
   .get("", async ({ authUser, query }): Promise<LeaveListResponse> => {
     const result = await listLeaves(authUser, query as ListLeavesQueryInput);
     return {
@@ -47,6 +48,48 @@ export const leavesController = new Elysia({ prefix: "/api/leaves" })
       ],
     },
   })
+  .patch("/:id/rejected", async ({ authUser, params }): Promise<RejectLeaveStatusResponse> => ({
+    status: "success",
+    data: await rejectLeave(authUser, Number(params.id)),
+  }), {
+    params: t.Object({ id: t.Numeric({ minimum: 1, error: "Leave ID must be a positive integer" }) }),
+    response: {
+      200: t.Object({ status: t.Literal("success"), data: t.Object({
+        id: t.Number(), startDate: t.String(), endDate: t.String(),
+        category: t.Union([t.Literal("Sakit"), t.Literal("Izin")]), status: t.Literal("Rejected"),
+      }) }),
+      400: t.Object({ status: t.Literal("error"), statusCode: t.Literal(400), errors: t.String() }),
+      401: t.Object({ status: t.Literal("error"), statusCode: t.Literal(401), errors: t.Literal("Unauthorized") }),
+      403: t.Object({ status: t.Literal("error"), statusCode: t.Literal(403), errors: t.String() }),
+      404: t.Object({ status: t.Literal("error"), statusCode: t.Literal(404), errors: t.Literal("Leave not found") }),
+      409: t.Object({ status: t.Literal("error"), statusCode: t.Literal(409), errors: t.String() }),
+      500: t.Object({ status: t.Literal("error"), statusCode: t.Literal(500), errors: t.Literal("Internal server error") }),
+    },
+    detail: { tags: ["Leaves"], summary: "Reject leave request", security: [{ bearerAuth: [] }] },
+  })
+  .patch("/:id/approved", async ({ authUser, params }): Promise<ApproveLeaveStatusResponse> => ({
+    status: "success",
+    data: await approveLeave(authUser, Number(params.id)),
+  }), {
+    params: t.Object({ id: t.Numeric({ minimum: 1, error: "Leave ID must be a positive integer" }) }),
+    response: {
+      200: t.Object({ status: t.Literal("success"), data: t.Object({
+        id: t.Number(), startDate: t.String(), endDate: t.String(),
+        category: t.Union([t.Literal("Sakit"), t.Literal("Izin")]), status: t.Literal("Approved"),
+      }) }),
+      400: t.Object({ status: t.Literal("error"), statusCode: t.Literal(400), errors: t.String() }),
+      401: t.Object({ status: t.Literal("error"), statusCode: t.Literal(401), errors: t.Literal("Unauthorized") }),
+      403: t.Object({ status: t.Literal("error"), statusCode: t.Literal(403), errors: t.String() }),
+      404: t.Object({ status: t.Literal("error"), statusCode: t.Literal(404), errors: t.Literal("Leave not found") }),
+      409: t.Object({ status: t.Literal("error"), statusCode: t.Literal(409), errors: t.String() }),
+      500: t.Object({ status: t.Literal("error"), statusCode: t.Literal(500), errors: t.Literal("Internal server error") }),
+    },
+    detail: { tags: ["Leaves"], summary: "Approve leave request", security: [{ bearerAuth: [] }] },
+  });
+
+export const leavesController = new Elysia({ prefix: "/api/leaves" })
+  .use(adminLeaveRoutes)
+  .use(authMiddleware)
   .get("/history", async ({ authUser, query }): Promise<LeaveHistoryResponse> => ({
     status: "success",
     data: await getLeaveHistory(authUser.id, query as LeaveHistoryQuery),
@@ -104,7 +147,7 @@ export const leavesController = new Elysia({ prefix: "/api/leaves" })
         errors: t.Union([t.Record(t.String(), t.Array(t.String())), t.String()]),
       }),
       401: t.Object({ status: t.Literal("error"), statusCode: t.Literal(401), errors: t.Literal("Unauthorized") }),
-      403: t.Object({ status: t.Literal("error"), statusCode: t.Literal(403), errors: t.Literal("Forbidden") }),
+      403: t.Object({ status: t.Literal("error"), statusCode: t.Literal(403), errors: t.String() }),
       404: t.Object({ status: t.Literal("error"), statusCode: t.Literal(404), errors: t.String() }),
       500: t.Object({ status: t.Literal("error"), statusCode: t.Literal(500), errors: t.Literal("Internal server error") }),
     },
@@ -177,42 +220,4 @@ export const leavesController = new Elysia({ prefix: "/api/leaves" })
         } } },
       },
     },
-  })
-  .patch("/:id/rejected", async ({ authUser, params }): Promise<RejectLeaveStatusResponse> => ({
-    status: "success",
-    data: await rejectLeave(authUser, Number(params.id)),
-  }), {
-    params: t.Object({ id: t.Numeric({ minimum: 1, error: "Leave ID must be a positive integer" }) }),
-    response: {
-      200: t.Object({ status: t.Literal("success"), data: t.Object({
-        id: t.Number(), startDate: t.String(), endDate: t.String(),
-        category: t.Union([t.Literal("Sakit"), t.Literal("Izin")]), status: t.Literal("Rejected"),
-      }) }),
-      400: t.Object({ status: t.Literal("error"), statusCode: t.Literal(400), errors: t.String() }),
-      401: t.Object({ status: t.Literal("error"), statusCode: t.Literal(401), errors: t.Literal("Unauthorized") }),
-      403: t.Object({ status: t.Literal("error"), statusCode: t.Literal(403), errors: t.Literal("Forbidden") }),
-      404: t.Object({ status: t.Literal("error"), statusCode: t.Literal(404), errors: t.Literal("Leave not found") }),
-      409: t.Object({ status: t.Literal("error"), statusCode: t.Literal(409), errors: t.String() }),
-      500: t.Object({ status: t.Literal("error"), statusCode: t.Literal(500), errors: t.Literal("Internal server error") }),
-    },
-    detail: { tags: ["Leaves"], summary: "Reject leave request", security: [{ bearerAuth: [] }] },
-  })
-  .patch("/:id/approved", async ({ authUser, params }): Promise<ApproveLeaveStatusResponse> => ({
-    status: "success",
-    data: await approveLeave(authUser, Number(params.id)),
-  }), {
-    params: t.Object({ id: t.Numeric({ minimum: 1, error: "Leave ID must be a positive integer" }) }),
-    response: {
-      200: t.Object({ status: t.Literal("success"), data: t.Object({
-        id: t.Number(), startDate: t.String(), endDate: t.String(),
-        category: t.Union([t.Literal("Sakit"), t.Literal("Izin")]), status: t.Literal("Approved"),
-      }) }),
-      400: t.Object({ status: t.Literal("error"), statusCode: t.Literal(400), errors: t.String() }),
-      401: t.Object({ status: t.Literal("error"), statusCode: t.Literal(401), errors: t.Literal("Unauthorized") }),
-      403: t.Object({ status: t.Literal("error"), statusCode: t.Literal(403), errors: t.Literal("Forbidden") }),
-      404: t.Object({ status: t.Literal("error"), statusCode: t.Literal(404), errors: t.Literal("Leave not found") }),
-      409: t.Object({ status: t.Literal("error"), statusCode: t.Literal(409), errors: t.String() }),
-      500: t.Object({ status: t.Literal("error"), statusCode: t.Literal(500), errors: t.Literal("Internal server error") }),
-    },
-    detail: { tags: ["Leaves"], summary: "Approve leave request", security: [{ bearerAuth: [] }] },
   });

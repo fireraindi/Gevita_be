@@ -2,7 +2,7 @@ import { and, count, desc, eq, gte, ilike, isNull, lte, lt } from "drizzle-orm";
 import { unlink } from "node:fs/promises";
 import { db } from "../../db";
 import { attendances, leaves, users } from "../../db/schema";
-import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../errors/errors";
+import { BadRequestError, ConflictError, NotFoundError } from "../../errors/errors";
 import { getLeavePhotoUrl } from "../../helpers/photo";
 import { validate } from "../../helpers/validate";
 import { storeUploadedImage } from "../../helpers/upload";
@@ -188,8 +188,8 @@ export async function getLeaveDetail(
     .limit(1);
 
   if (!leave) throw new NotFoundError("Leave data not found");
-  if (currentUser.role !== "admin" && leave.user_id !== currentUser.id) {
-    throw new ForbiddenError("Forbidden");
+  if (leave.user_id !== currentUser.id) {
+    await requireActiveAdmin(currentUser);
   }
 
   return {
@@ -219,7 +219,7 @@ export async function rejectLeave(
   currentUser: { id: string; role: "admin" | "employee" },
   leaveId: number,
 ): Promise<UpdateLeaveStatusData & { status: "Rejected" }> {
-  if (currentUser.role !== "admin") throw new ForbiddenError("Forbidden");
+  await requireActiveAdmin(currentUser);
   const leave = await getPendingLeave(leaveId);
   const [updated] = await db.update(leaves)
     .set({ status: "Rejected", updated_at: new Date() })
@@ -233,7 +233,7 @@ export async function approveLeave(
   currentUser: { id: string; role: "admin" | "employee" },
   leaveId: number,
 ): Promise<UpdateLeaveStatusData & { status: "Approved" }> {
-  if (currentUser.role !== "admin") throw new ForbiddenError("Forbidden");
+  await requireActiveAdmin(currentUser);
   const leave = await getPendingLeave(leaveId);
   const leaveDates = getInclusiveDateRange(leave.start_date, leave.end_date);
 
