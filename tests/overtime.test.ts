@@ -1056,4 +1056,149 @@ describe("Overtime API", () => {
       expect(deletedAdmin.body.errors).toBe("Unauthorized");
     });
   });
+
+  describe("Approve & Reject overtime (PATCH /api/overtimes/:id/approve & /reject)", () => {
+    test("allows an active admin to reject and approve an overtime record", async () => {
+      const user = await registerUser(namespace);
+      const created = await requestJson("/api/overtimes", "POST", {
+        userId: user.body.data.id,
+        timeFrame: 2,
+        start: "19:00",
+        end: "21:00",
+        description: "Service Ac",
+        date: "2026-11-26",
+      }, adminToken);
+      expect(created.response.status).toBe(201);
+      expect(created.body.data.status).toBe(true);
+
+      const overtimeId = created.body.data.id as number;
+
+      // Reject overtime -> status becomes false
+      const rejectRes = await requestJson(`/api/overtimes/${overtimeId}/reject`, "PATCH", undefined, adminToken);
+      expect(rejectRes.response.status).toBe(200);
+      expect(rejectRes.body.status).toBe("success");
+      expect(rejectRes.body.message).toBe("Data lembur berhasil ditolak");
+      expect(rejectRes.body.data).toMatchObject({
+        id: overtimeId,
+        userId: user.body.data.id,
+        timeFrame: 2,
+        start: "19:00",
+        end: "21:00",
+        description: "Service Ac",
+        date: "2026-11-26",
+        status: false,
+      });
+      expect(typeof rejectRes.body.data.createdAt).toBe("string");
+
+      const [afterReject] = await testDb
+        .select({ status: testOvertimes.status })
+        .from(testOvertimes)
+        .where(eq(testOvertimes.id, overtimeId))
+        .limit(1);
+      expect(afterReject?.status).toBe(false);
+
+      // Approve overtime -> status becomes true
+      const approveRes = await requestJson(`/api/overtimes/${overtimeId}/approve`, "PATCH", undefined, adminToken);
+      expect(approveRes.response.status).toBe(200);
+      expect(approveRes.body.status).toBe("success");
+      expect(approveRes.body.message).toBe("Data lembur berhasil disetujui");
+      expect(approveRes.body.data).toMatchObject({
+        id: overtimeId,
+        userId: user.body.data.id,
+        status: true,
+      });
+
+      const [afterApprove] = await testDb
+        .select({ status: testOvertimes.status })
+        .from(testOvertimes)
+        .where(eq(testOvertimes.id, overtimeId))
+        .limit(1);
+      expect(afterApprove?.status).toBe(true);
+    });
+
+    test("rejects invalid path parameter id with 400 Bad Request on both approve and reject", async () => {
+      for (const action of ["approve", "reject"] as const) {
+        for (const badId of ["abc", "0", "-5", "1.5", "99999999999"]) {
+          const res = await requestJson(`/api/overtimes/${badId}/${action}`, "PATCH", undefined, adminToken);
+          expect(res.response.status).toBe(400);
+          expect(res.body.status).toBe("error");
+          expect(res.body.statusCode).toBe(400);
+          expect(res.body.errors.id).toBeDefined();
+        }
+      }
+    });
+
+    test("returns 404 when overtime does not exist or has been soft-deleted on approve and reject", async () => {
+      const user = await registerUser(namespace);
+      const created = await requestJson("/api/overtimes", "POST", {
+        userId: user.body.data.id,
+        timeFrame: 2,
+        start: "19:00",
+        end: "21:00",
+        description: "Service Ac",
+        date: "2026-11-26",
+      }, adminToken);
+      const overtimeId = created.body.data.id as number;
+
+      await testDb
+        .update(testOvertimes)
+        .set({ deleted_at: new Date() })
+        .where(eq(testOvertimes.id, overtimeId));
+
+      for (const action of ["approve", "reject"] as const) {
+        const missing = await requestJson(`/api/overtimes/999999/${action}`, "PATCH", undefined, adminToken);
+        expect(missing.response.status).toBe(404);
+        expect(missing.body.status).toBe("error");
+        expect(missing.body.statusCode).toBe(404);
+        expect(missing.body.errors).toBe("Overtime not found");
+
+        const deletedRes = await requestJson(`/api/overtimes/${overtimeId}/${action}`, "PATCH", undefined, adminToken);
+        expect(deletedRes.response.status).toBe(404);
+        expect(deletedRes.body.errors).toBe("Overtime not found");
+      }
+    });
+
+    test("enforces active admin authorization and valid JWT token on approve and reject", async () => {
+      const employeeToken = jwt.sign({ id: "test-employee", role: "employee" }, String(process.env.JWT_SECRET));
+      const ghostAdminToken = jwt.sign({ id: crypto.randomUUID(), role: "admin" }, String(process.env.JWT_SECRET));
+
+      const adminPayload = validUser(namespace, { role: "admin" });
+      const createdAdmin = await registerUser(namespace, adminPayload);
+      const login = await loginUser(adminPayload.email, adminPayload.password);
+      const token = login.body.data.token as string;
+      const adminId = createdAdmin.body.data.id as string;
+
+      for (const action of ["approve", "reject"] as const) {
+        const noAuth = await requestJson(`/api/overtimes/1/${action}`, "PATCH");
+        expect(noAuth.response.status).toBe(401);
+        expect(noAuth.body.errors).toBe("Unauthorized");
+
+        const invalidToken = await requestJson(`/api/overtimes/1/${action}`, "PATCH", undefined, "invalid-token");
+        expect(invalidToken.response.status).toBe(401);
+        expect(invalidToken.body.errors).toBe("Unauthorized");
+
+        const employeeRes = await requestJson(`/api/overtimes/1/${action}`, "PATCH", undefined, employeeToken);
+        expect(employeeRes.response.status).toBe(403);
+        expect(employeeRes.body.errors).toBe("Forbidden");
+
+        const deletedAdmin = await requestJson(`/api/overtimes/1/${action}`, "PATCH", undefined, ghostAdminToken);
+        expect(deletedAdmin.response.status).toBe(401);
+        expect(deletedAdmin.body.errors).toBe("Unauthorized");
+      }
+
+      await testDb.update(testUsers).set({ is_active: false }).where(eq(testUsers.id, adminId));
+      for (const action of ["approve", "reject"] as const) {
+        const inactive = await requestJson(`/api/overtimes/1/${action}`, "PATCH", undefined, token);
+        expect(inactive.response.status).toBe(403);
+        expect(inactive.body.errors).toBe("User account is inactive");
+      }
+
+      await testDb.update(testUsers).set({ is_active: true, role: "employee" }).where(eq(testUsers.id, adminId));
+      for (const action of ["approve", "reject"] as const) {
+        const demoted = await requestJson(`/api/overtimes/1/${action}`, "PATCH", undefined, token);
+        expect(demoted.response.status).toBe(403);
+        expect(demoted.body.errors).toBe("Forbidden");
+      }
+    });
+  });
 });

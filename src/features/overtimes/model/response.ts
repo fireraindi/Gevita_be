@@ -43,3 +43,15 @@ export interface ListOvertimesSuccessResponse {
   data: OvertimeListItem[];
   pagination: OvertimePagination;
 }
+
+export interface ApproveOvertimeSuccessResponse {
+  status: "success";
+  message: "Data lembur berhasil disetujui";
+  data: OvertimeResponseData;
+}
+
+export interface RejectOvertimeSuccessResponse {
+  status: "success";
+  message: "Data lembur berhasil ditolak";
+  data: OvertimeResponseData;
+}

@@ -233,3 +233,31 @@ export async function removeOvertime(rawId: number | string): Promise<void> {
 
   if (!deleted) throw new NotFoundError("Overtime not found");
 }
+
+async function updateOvertimeStatus(
+  rawId: number | string,
+  status: boolean,
+): Promise<OvertimeResponseData> {
+  const param = validate(overtimeIdParamSchema, { id: rawId });
+
+  const [updated] = await db
+    .update(overtimes)
+    .set({
+      status,
+      updated_at: new Date(),
+    })
+    .where(and(eq(overtimes.id, param.id), isNull(overtimes.deleted_at)))
+    .returning(overtimeReturningColumns);
+
+  if (!updated) throw new NotFoundError("Overtime not found");
+
+  return toOvertimeResponseData(updated);
+}
+
+export async function approveOvertime(rawId: number | string): Promise<OvertimeResponseData> {
+  return updateOvertimeStatus(rawId, true);
+}
+
+export async function rejectOvertime(rawId: number | string): Promise<OvertimeResponseData> {
+  return updateOvertimeStatus(rawId, false);
+}

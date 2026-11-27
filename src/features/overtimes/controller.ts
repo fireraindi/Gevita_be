@@ -2,12 +2,14 @@ import { Elysia, t } from "elysia";
 import { activeAdminMiddleware } from "../../middleware/admin";
 import type { CreateOvertimeRequest, ListOvertimesQueryInput, UpdateOvertimeRequest } from "./model/request";
 import type {
+  ApproveOvertimeSuccessResponse,
   CreateOvertimeSuccessResponse,
   DeleteOvertimeSuccessResponse,
   ListOvertimesSuccessResponse,
+  RejectOvertimeSuccessResponse,
   UpdateOvertimeSuccessResponse,
 } from "./model/response";
-import { createOvertime, getOvertimes, removeOvertime, updateOvertime } from "./service";
+import { approveOvertime, createOvertime, getOvertimes, rejectOvertime, removeOvertime, updateOvertime } from "./service";
 
 const overtimeListItemSchema = t.Object({
   id: t.Number(),
@@ -249,6 +251,66 @@ export const overtimesController = new Elysia({ prefix: "/api/overtimes" })
       tags: ["Overtimes"],
       summary: "Soft delete overtime record (Admin Only)",
       description: "Menghapus data lembur secara lunak (soft delete) dengan mengisi kolom deleted_at. Hanya dapat diakses oleh admin aktif.",
+      security: [{ bearerAuth: [] }],
+    },
+  })
+  .patch("/:id/approve", async ({ params }): Promise<ApproveOvertimeSuccessResponse> => {
+    const data = await approveOvertime(params.id);
+    return {
+      status: "success",
+      message: "Data lembur berhasil disetujui",
+      data,
+    };
+  }, {
+    params: t.Object({
+      id: t.String({ description: "Overtime ID" }),
+    }),
+    response: {
+      200: t.Object({
+        status: t.Literal("success"),
+        message: t.Literal("Data lembur berhasil disetujui"),
+        data: overtimeDataSchema,
+      }),
+      400: badRequestErrorSchema,
+      401: unauthorizedErrorSchema,
+      403: forbiddenErrorSchema,
+      404: t.Object({ status: t.Literal("error"), statusCode: t.Literal(404), errors: t.Literal("Overtime not found") }),
+      500: internalServerErrorSchema,
+    },
+    detail: {
+      tags: ["Overtimes"],
+      summary: "Approve overtime record (Admin Only)",
+      description: "Menyetujui data lembur dengan mengubah kolom status menjadi true. Hanya dapat diakses oleh admin aktif.",
+      security: [{ bearerAuth: [] }],
+    },
+  })
+  .patch("/:id/reject", async ({ params }): Promise<RejectOvertimeSuccessResponse> => {
+    const data = await rejectOvertime(params.id);
+    return {
+      status: "success",
+      message: "Data lembur berhasil ditolak",
+      data,
+    };
+  }, {
+    params: t.Object({
+      id: t.String({ description: "Overtime ID" }),
+    }),
+    response: {
+      200: t.Object({
+        status: t.Literal("success"),
+        message: t.Literal("Data lembur berhasil ditolak"),
+        data: overtimeDataSchema,
+      }),
+      400: badRequestErrorSchema,
+      401: unauthorizedErrorSchema,
+      403: forbiddenErrorSchema,
+      404: t.Object({ status: t.Literal("error"), statusCode: t.Literal(404), errors: t.Literal("Overtime not found") }),
+      500: internalServerErrorSchema,
+    },
+    detail: {
+      tags: ["Overtimes"],
+      summary: "Reject overtime record (Admin Only)",
+      description: "Menolak data lembur dengan mengubah kolom status menjadi false. Hanya dapat diakses oleh admin aktif.",
       security: [{ bearerAuth: [] }],
     },
   });
