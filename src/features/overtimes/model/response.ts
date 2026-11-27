@@ -41,3 +41,17 @@ export interface DeleteOvertimeSuccessResponse {
   status: "success";
   message: "Data lembur berhasil dihapus";
 }
+
+export interface OvertimePagination {
+  page: number;
+  limit: number;
+  total: number;
+  total_pages: number;
+}
+
+export interface ListOvertimesSuccessResponse {
+  status: "success";
+  message: "Data lembur berhasil diambil";
+  data: OvertimeDetailData[];
+  pagination: OvertimePagination;
+}

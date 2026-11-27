@@ -1,8 +1,8 @@
 import { Elysia, t } from "elysia";
 import { activeAdminMiddleware } from "../../middleware/admin";
-import type { CreateOvertimeRequest, UpdateOvertimeRequest } from "./model/request";
-import type { CreateOvertimeSuccessResponse, DeleteOvertimeSuccessResponse, DetailOvertimeSuccessResponse, UpdateOvertimeSuccessResponse } from "./model/response";
-import { createOvertime, getOvertimeById, removeOvertime, updateOvertime } from "./service";
+import type { CreateOvertimeRequest, ListOvertimesQueryInput, UpdateOvertimeRequest } from "./model/request";
+import type { CreateOvertimeSuccessResponse, DeleteOvertimeSuccessResponse, DetailOvertimeSuccessResponse, ListOvertimesSuccessResponse, UpdateOvertimeSuccessResponse } from "./model/response";
+import { createOvertime, getOvertimeById, getOvertimes, removeOvertime, updateOvertime } from "./service";
 
 const overtimeDetailDataSchema = t.Object({
   id: t.Number(),
@@ -51,6 +51,76 @@ const internalServerErrorSchema = t.Object({
 
 export const overtimesController = new Elysia({ prefix: "/api/overtimes" })
   .use(activeAdminMiddleware)
+  .get("", async ({ query }): Promise<ListOvertimesSuccessResponse> => {
+    const result = await getOvertimes(query as ListOvertimesQueryInput);
+    return {
+      status: "success",
+      message: "Data lembur berhasil diambil",
+      data: result.data,
+      pagination: result.pagination,
+    };
+  }, {
+    response: {
+      200: t.Object({
+        status: t.Literal("success"),
+        message: t.Literal("Data lembur berhasil diambil"),
+        data: t.Array(overtimeDetailDataSchema),
+        pagination: t.Object({
+          page: t.Number(),
+          limit: t.Number(),
+          total: t.Number(),
+          total_pages: t.Number(),
+        }),
+      }),
+      400: badRequestErrorSchema,
+      401: unauthorizedErrorSchema,
+      403: forbiddenErrorSchema,
+      500: internalServerErrorSchema,
+    },
+    detail: {
+      tags: ["Overtimes"],
+      summary: "Get overtime list (Admin Only)",
+      description: "Mengambil daftar data lembur aktif (belum di-soft delete) dengan filter nama karyawan, rentang tanggal inklusif, dan pagination. Hanya dapat diakses oleh admin aktif.",
+      security: [{ bearerAuth: [] }],
+      parameters: [
+        {
+          in: "query",
+          name: "name",
+          required: false,
+          schema: { type: "string", maxLength: 100 },
+          description: "Filter berdasarkan nama karyawan (parsial, case-insensitive)",
+        },
+        {
+          in: "query",
+          name: "start_date",
+          required: false,
+          schema: { type: "string", format: "date" },
+          description: "Batas awal tanggal lembur inklusif (YYYY-MM-DD)",
+        },
+        {
+          in: "query",
+          name: "end_date",
+          required: false,
+          schema: { type: "string", format: "date" },
+          description: "Batas akhir tanggal lembur inklusif (YYYY-MM-DD)",
+        },
+        {
+          in: "query",
+          name: "limit",
+          required: false,
+          schema: { type: "integer", minimum: 1, maximum: 100, default: 20 },
+          description: "Jumlah data per halaman (default: 20, max: 100, tidak boleh <= 0)",
+        },
+        {
+          in: "query",
+          name: "page",
+          required: false,
+          schema: { type: "integer", minimum: 1, default: 1 },
+          description: "Nomor halaman (default: 1)",
+        },
+      ],
+    },
+  })
   .post("", async ({ body, set }): Promise<CreateOvertimeSuccessResponse> => {
     const data = await createOvertime(body as CreateOvertimeRequest);
     set.status = 201;

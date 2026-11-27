@@ -868,4 +868,292 @@ describe("Overtime API", () => {
       expect(deletedAdmin.body.errors).toBe("Unauthorized");
     });
   });
+
+  describe("Get overtime list (GET /api/overtimes)", () => {
+    test("allows an active admin to retrieve active overtimes with default pagination and excludes soft-deleted rows", async () => {
+      const user = await registerUser(namespace);
+      const active = await requestJson("/api/overtimes", "POST", {
+        userId: user.body.data.id,
+        timeFrame: 2,
+        start: "19:00",
+        end: "21:00",
+        description: "Service Ac",
+        date: "2026-11-26",
+      }, adminToken);
+      const toDelete = await requestJson("/api/overtimes", "POST", {
+        userId: user.body.data.id,
+        timeFrame: 2,
+        start: "21:00",
+        end: "23:00",
+        description: "Deleted Overtime",
+        date: "2026-11-26",
+      }, adminToken);
+      expect(active.response.status).toBe(201);
+      expect(toDelete.response.status).toBe(201);
+
+      await requestJson(`/api/overtimes/${toDelete.body.data.id}`, "DELETE", undefined, adminToken);
+
+      const { response, body } = await requestJson("/api/overtimes", "GET", undefined, adminToken);
+      expect(response.status).toBe(200);
+      expect(body.status).toBe("success");
+      expect(body.message).toBe("Data lembur berhasil diambil");
+      expect(Array.isArray(body.data)).toBe(true);
+      expect(body.pagination).toMatchObject({
+        page: 1,
+        limit: 20,
+      });
+      expect(body.pagination.total).toBeGreaterThanOrEqual(1);
+      expect(body.pagination.total_pages).toBeGreaterThanOrEqual(1);
+
+      const ids = body.data.map((item: { id: number }) => item.id);
+      expect(ids).toContain(active.body.data.id);
+      expect(ids).not.toContain(toDelete.body.data.id);
+
+      const foundActive = body.data.find((item: { id: number }) => item.id === active.body.data.id);
+      expect(foundActive).toEqual({
+        id: active.body.data.id,
+        userId: user.body.data.id,
+        timeFrame: 2,
+        start: "19:00",
+        end: "21:00",
+        description: "Service Ac",
+        date: "2026-11-26",
+      });
+    });
+
+    test("filters overtimes by employee name partially, case-insensitively, and escapes wildcards", async () => {
+      const targetName = `Budi Lembur ${Date.now()}`;
+      const targetUser = await registerUser(namespace, validUser(namespace, { name: targetName }));
+      const otherUser = await registerUser(namespace, validUser(namespace, { name: `Siti Lain ${Date.now()}` }));
+
+      const targetOvertime = await requestJson("/api/overtimes", "POST", {
+        userId: targetUser.body.data.id,
+        timeFrame: 2,
+        start: "19:00",
+        end: "21:00",
+        description: "Server Backup",
+        date: "2026-11-26",
+      }, adminToken);
+      await requestJson("/api/overtimes", "POST", {
+        userId: otherUser.body.data.id,
+        timeFrame: 2,
+        start: "19:00",
+        end: "21:00",
+        description: "Network Check",
+        date: "2026-11-26",
+      }, adminToken);
+
+      const { response, body } = await requestJson(
+        `/api/overtimes?name=${encodeURIComponent("budi lembur")}`,
+        "GET",
+        undefined,
+        adminToken,
+      );
+      expect(response.status).toBe(200);
+      expect(body.data.some((item: { id: number }) => item.id === targetOvertime.body.data.id)).toBe(true);
+      expect(body.data.every((item: { userId: string }) => item.userId === targetUser.body.data.id)).toBe(true);
+
+      // Literal % wildcard must not match everything
+      const wildcardRes = await requestJson("/api/overtimes?name=%25", "GET", undefined, adminToken);
+      expect(wildcardRes.response.status).toBe(200);
+      expect(wildcardRes.body.data).toEqual([]);
+      expect(wildcardRes.body.pagination.total).toBe(0);
+    });
+
+    test("filters overtimes by inclusive start_date and end_date", async () => {
+      const uniqueName = `RangeUser-${Date.now()}`;
+      const user = await registerUser(namespace, validUser(namespace, { name: uniqueName }));
+
+      const beforeRange = await requestJson("/api/overtimes", "POST", {
+        userId: user.body.data.id,
+        timeFrame: 2,
+        start: "19:00",
+        end: "21:00",
+        description: "Before",
+        date: "2026-11-24",
+      }, adminToken);
+      const onStart = await requestJson("/api/overtimes", "POST", {
+        userId: user.body.data.id,
+        timeFrame: 2,
+        start: "19:00",
+        end: "21:00",
+        description: "Start",
+        date: "2026-11-25",
+      }, adminToken);
+      const onEnd = await requestJson("/api/overtimes", "POST", {
+        userId: user.body.data.id,
+        timeFrame: 2,
+        start: "19:00",
+        end: "21:00",
+        description: "End",
+        date: "2026-11-27",
+      }, adminToken);
+      const afterRange = await requestJson("/api/overtimes", "POST", {
+        userId: user.body.data.id,
+        timeFrame: 2,
+        start: "19:00",
+        end: "21:00",
+        description: "After",
+        date: "2026-11-28",
+      }, adminToken);
+
+      const encodedName = encodeURIComponent(uniqueName);
+      const bothBounds = await requestJson(
+        `/api/overtimes?name=${encodedName}&start_date=2026-11-25&end_date=2026-11-27`,
+        "GET",
+        undefined,
+        adminToken,
+      );
+      expect(bothBounds.response.status).toBe(200);
+      expect(bothBounds.body.data.map((d: { id: number }) => d.id)).toEqual([
+        onEnd.body.data.id,
+        onStart.body.data.id,
+      ]);
+      expect(bothBounds.body.pagination.total).toBe(2);
+
+      const onlyStart = await requestJson(
+        `/api/overtimes?name=${encodedName}&start_date=2026-11-27`,
+        "GET",
+        undefined,
+        adminToken,
+      );
+      expect(onlyStart.response.status).toBe(200);
+      expect(onlyStart.body.data.map((d: { id: number }) => d.id)).toEqual([
+        afterRange.body.data.id,
+        onEnd.body.data.id,
+      ]);
+
+      const onlyEnd = await requestJson(
+        `/api/overtimes?name=${encodedName}&end_date=2026-11-25`,
+        "GET",
+        undefined,
+        adminToken,
+      );
+      expect(onlyEnd.response.status).toBe(200);
+      expect(onlyEnd.body.data.map((d: { id: number }) => d.id)).toEqual([
+        onStart.body.data.id,
+        beforeRange.body.data.id,
+      ]);
+    });
+
+    test("paginates newest first (date DESC, id DESC) with custom limit and page", async () => {
+      const uniqueName = `PageUser-${Date.now()}`;
+      const user = await registerUser(namespace, validUser(namespace, { name: uniqueName }));
+      const createdIds: number[] = [];
+
+      for (const date of ["2026-11-20", "2026-11-21", "2026-11-22"]) {
+        const res = await requestJson("/api/overtimes", "POST", {
+          userId: user.body.data.id,
+          timeFrame: 2,
+          start: "19:00",
+          end: "21:00",
+          description: `Work ${date}`,
+          date,
+        }, adminToken);
+        createdIds.push(res.body.data.id as number);
+      }
+
+      const encodedName = encodeURIComponent(uniqueName);
+      const page1 = await requestJson(`/api/overtimes?name=${encodedName}&limit=2&page=1`, "GET", undefined, adminToken);
+      expect(page1.response.status).toBe(200);
+      expect(page1.body.data.map((d: { id: number }) => d.id)).toEqual([createdIds[2], createdIds[1]]);
+      expect(page1.body.pagination).toEqual({
+        page: 1,
+        limit: 2,
+        total: 3,
+        total_pages: 2,
+      });
+
+      const page2 = await requestJson(`/api/overtimes?name=${encodedName}&limit=2&page=2`, "GET", undefined, adminToken);
+      expect(page2.response.status).toBe(200);
+      expect(page2.body.data.map((d: { id: number }) => d.id)).toEqual([createdIds[0]]);
+      expect(page2.body.pagination).toEqual({
+        page: 2,
+        limit: 2,
+        total: 3,
+        total_pages: 2,
+      });
+    });
+
+    test("returns empty array and zero pagination totals when no records match", async () => {
+      const { response, body } = await requestJson(
+        `/api/overtimes?name=no-match-${Date.now()}`,
+        "GET",
+        undefined,
+        adminToken,
+      );
+      expect(response.status).toBe(200);
+      expect(body.status).toBe("success");
+      expect(body.data).toEqual([]);
+      expect(body.pagination).toEqual({
+        page: 1,
+        limit: 20,
+        total: 0,
+        total_pages: 0,
+      });
+    });
+
+    test("validates query parameters strictly and returns 400 Bad Request on invalid values", async () => {
+      for (const badLimit of ["0", "-5", "101", "abc", "1.5"]) {
+        const res = await requestJson(`/api/overtimes?limit=${badLimit}`, "GET", undefined, adminToken);
+        expect(res.response.status).toBe(400);
+        expect(res.body.status).toBe("error");
+        expect(res.body.statusCode).toBe(400);
+        expect(res.body.errors.limit).toBeDefined();
+      }
+
+      const badPage = await requestJson("/api/overtimes?page=0", "GET", undefined, adminToken);
+      expect(badPage.response.status).toBe(400);
+      expect(badPage.body.errors.page).toBeDefined();
+
+      const badDate = await requestJson("/api/overtimes?start_date=2026-02-30", "GET", undefined, adminToken);
+      expect(badDate.response.status).toBe(400);
+      expect(badDate.body.errors.start_date).toContain("Start date must be a valid date in YYYY-MM-DD format");
+
+      const reversedRange = await requestJson(
+        "/api/overtimes?start_date=2026-11-28&end_date=2026-11-25",
+        "GET",
+        undefined,
+        adminToken,
+      );
+      expect(reversedRange.response.status).toBe(400);
+      expect(reversedRange.body.errors.end_date).toContain("End date must be greater than or equal to start date");
+    });
+
+    test("enforces active admin authorization and valid JWT token", async () => {
+      const noAuth = await requestJson("/api/overtimes", "GET");
+      expect(noAuth.response.status).toBe(401);
+      expect(noAuth.body.errors).toBe("Unauthorized");
+
+      const invalidToken = await requestJson("/api/overtimes", "GET", undefined, "invalid-token");
+      expect(invalidToken.response.status).toBe(401);
+      expect(invalidToken.body.errors).toBe("Unauthorized");
+
+      const employeeToken = jwt.sign({ id: "test-employee", role: "employee" }, String(process.env.JWT_SECRET));
+      const employeeRes = await requestJson("/api/overtimes", "GET", undefined, employeeToken);
+      expect(employeeRes.response.status).toBe(403);
+      expect(employeeRes.body.errors).toBe("Forbidden");
+
+      const adminPayload = validUser(namespace, { role: "admin" });
+      const createdAdmin = await registerUser(namespace, adminPayload);
+      const login = await loginUser(adminPayload.email, adminPayload.password);
+      const token = login.body.data.token as string;
+      const adminId = createdAdmin.body.data.id as string;
+
+      await testDb.update(testUsers).set({ is_active: false }).where(eq(testUsers.id, adminId));
+      const inactive = await requestJson("/api/overtimes", "GET", undefined, token);
+      expect(inactive.response.status).toBe(403);
+      expect(inactive.body.errors).toBe("User account is inactive");
+
+      await testDb.update(testUsers).set({ is_active: true, role: "employee" }).where(eq(testUsers.id, adminId));
+      const demoted = await requestJson("/api/overtimes", "GET", undefined, token);
+      expect(demoted.response.status).toBe(403);
+      expect(demoted.body.errors).toBe("Forbidden");
+
+      const ghostAdminToken = jwt.sign({ id: crypto.randomUUID(), role: "admin" }, String(process.env.JWT_SECRET));
+      const deletedAdmin = await requestJson("/api/overtimes", "GET", undefined, ghostAdminToken);
+      expect(deletedAdmin.response.status).toBe(401);
+      expect(deletedAdmin.body.errors).toBe("Unauthorized");
+    });
+  });
 });

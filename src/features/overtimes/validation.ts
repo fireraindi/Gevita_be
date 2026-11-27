@@ -94,6 +94,47 @@ export const updateOvertimeSchema = z
   .object(overtimeBaseFields)
   .superRefine((data, ctx) => validateOvertimeSchedule(data, ctx)) satisfies z.ZodType<UpdateOvertimeRequest>;
 
+const paginationNumber = (field: string, minimum: number, maximum?: number, defaultValue = 1) =>
+  z.preprocess(
+    (value) => (value === undefined || value === "" ? defaultValue : value),
+    z.coerce
+      .number({ error: `${field} must be a number` })
+      .int(`${field} must be an integer`)
+      .min(minimum, `${field} must be at least ${minimum}`)
+      .refine((value) => maximum === undefined || value <= maximum, {
+        message: maximum === undefined ? `${field} is out of range` : `${field} must not exceed ${maximum}`,
+      }),
+  );
+
+const optionalDateQuery = (label: string) =>
+  z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z
+      .string()
+      .trim()
+      .refine(isValidCalendarDate, `${label} must be a valid date in YYYY-MM-DD format`)
+      .optional(),
+  );
+
+export const listOvertimesQuerySchema = z
+  .object({
+    name: z.string().trim().max(100, "Name must not exceed 100 characters").optional(),
+    start_date: optionalDateQuery("Start date"),
+    end_date: optionalDateQuery("End date"),
+    limit: paginationNumber("Limit", 1, 100, 20),
+    page: paginationNumber("Page", 1, 2_147_483_647, 1),
+  })
+  .superRefine((query, ctx) => {
+    if (query.start_date && query.end_date && query.end_date < query.start_date) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["end_date"],
+        message: "End date must be greater than or equal to start date",
+      });
+    }
+  });
+
 export type OvertimeIdParam = z.infer<typeof overtimeIdParamSchema>;
 export type CreateOvertimeInput = z.infer<typeof createOvertimeSchema>;
 export type UpdateOvertimeInput = z.infer<typeof updateOvertimeSchema>;
+export type ListOvertimesQuery = z.infer<typeof listOvertimesQuerySchema>;

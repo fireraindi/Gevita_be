@@ -14,3 +14,11 @@ export interface UpdateOvertimeRequest {
   description: string;
   date: string;
 }
+
+export interface ListOvertimesQueryInput {
+  name?: string;
+  start_date?: string;
+  end_date?: string;
+  limit?: number | string;
+  page?: number | string;
+}
