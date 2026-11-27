@@ -1,10 +1,15 @@
 import { Elysia, t } from "elysia";
 import { activeAdminMiddleware } from "../../middleware/admin";
 import type { CreateOvertimeRequest, ListOvertimesQueryInput, UpdateOvertimeRequest } from "./model/request";
-import type { CreateOvertimeSuccessResponse, DeleteOvertimeSuccessResponse, DetailOvertimeSuccessResponse, ListOvertimesSuccessResponse, UpdateOvertimeSuccessResponse } from "./model/response";
-import { createOvertime, getOvertimeById, getOvertimes, removeOvertime, updateOvertime } from "./service";
+import type {
+  CreateOvertimeSuccessResponse,
+  DeleteOvertimeSuccessResponse,
+  ListOvertimesSuccessResponse,
+  UpdateOvertimeSuccessResponse,
+} from "./model/response";
+import { createOvertime, getOvertimes, removeOvertime, updateOvertime } from "./service";
 
-const overtimeDetailDataSchema = t.Object({
+const overtimeListItemSchema = t.Object({
   id: t.Number(),
   userId: t.String(),
   timeFrame: t.Number(),
@@ -12,10 +17,11 @@ const overtimeDetailDataSchema = t.Object({
   end: t.String(),
   description: t.String(),
   date: t.String(),
+  status: t.Boolean(),
 });
 
 const overtimeDataSchema = t.Object({
-  ...overtimeDetailDataSchema.properties,
+  ...overtimeListItemSchema.properties,
   createdAt: t.String(),
 });
 
@@ -64,7 +70,7 @@ export const overtimesController = new Elysia({ prefix: "/api/overtimes" })
       200: t.Object({
         status: t.Literal("success"),
         message: t.Literal("Data lembur berhasil diambil"),
-        data: t.Array(overtimeDetailDataSchema),
+        data: t.Array(overtimeListItemSchema),
         pagination: t.Object({
           page: t.Number(),
           limit: t.Number(),
@@ -146,7 +152,7 @@ export const overtimesController = new Elysia({ prefix: "/api/overtimes" })
     detail: {
       tags: ["Overtimes"],
       summary: "Create overtime record (Admin Only)",
-      description: "Membuat catatan lembur untuk karyawan tertentu. Hanya dapat diakses oleh admin aktif.",
+      description: "Membuat catatan lembur untuk karyawan tertentu dengan status aktif otomatis (true). Hanya dapat diakses oleh admin aktif.",
       security: [{ bearerAuth: [] }],
       requestBody: {
         required: true,
@@ -216,36 +222,6 @@ export const overtimesController = new Elysia({ prefix: "/api/overtimes" })
           },
         },
       },
-    },
-  })
-  .get("/:id", async ({ params }): Promise<DetailOvertimeSuccessResponse> => {
-    const data = await getOvertimeById(params.id);
-    return {
-      status: "success",
-      message: "Data lembur berhasil diambil",
-      data,
-    };
-  }, {
-    params: t.Object({
-      id: t.String({ description: "Overtime ID" }),
-    }),
-    response: {
-      200: t.Object({
-        status: t.Literal("success"),
-        message: t.Literal("Data lembur berhasil diambil"),
-        data: overtimeDetailDataSchema,
-      }),
-      400: badRequestErrorSchema,
-      401: unauthorizedErrorSchema,
-      403: forbiddenErrorSchema,
-      404: t.Object({ status: t.Literal("error"), statusCode: t.Literal(404), errors: t.Literal("Overtime not found") }),
-      500: internalServerErrorSchema,
-    },
-    detail: {
-      tags: ["Overtimes"],
-      summary: "Get overtime detail by ID (Admin Only)",
-      description: "Mengambil detail satu data lembur berdasarkan ID (tidak termasuk data yang sudah di-soft delete). Hanya dapat diakses oleh admin aktif.",
-      security: [{ bearerAuth: [] }],
     },
   })
   .delete("/:id", async ({ params }): Promise<DeleteOvertimeSuccessResponse> => {

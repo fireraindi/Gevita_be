@@ -5,14 +5,14 @@ import { BadRequestError, ConflictError, NotFoundError } from "../../errors/erro
 import { escapeIlikePattern } from "../../helpers/sql";
 import { validate } from "../../helpers/validate";
 import type { CreateOvertimeRequest, ListOvertimesQueryInput, UpdateOvertimeRequest } from "./model/request";
-import type { OvertimeDetailData, OvertimePagination, OvertimeResponseData } from "./model/response";
+import type { OvertimeListItem, OvertimePagination, OvertimeResponseData } from "./model/response";
 import { createOvertimeSchema, listOvertimesQuerySchema, overtimeIdParamSchema, updateOvertimeSchema } from "./validation";
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 const formatTimeHHMM = (value: string): string => value.slice(0, 5);
 
-const overtimeReturningColumns = {
+const overtimeListColumns = {
   id: overtimes.id,
   userId: overtimes.user_id,
   timeFrame: overtimes.time_frame,
@@ -20,21 +20,19 @@ const overtimeReturningColumns = {
   end: overtimes.end,
   description: overtimes.description,
   date: overtimes.date,
+  status: overtimes.status,
+};
+
+const overtimeReturningColumns = {
+  ...overtimeListColumns,
   createdAt: overtimes.created_at,
 };
 
-interface OvertimeDbRow {
-  id: number;
-  userId: string;
-  timeFrame: number;
-  start: string;
-  end: string;
-  description: string;
-  date: string;
+interface OvertimeDbRow extends OvertimeListItem {
   createdAt: Date;
 }
 
-function toOvertimeResponseData(row: OvertimeDbRow): OvertimeResponseData {
+function toOvertimeListItem(row: OvertimeListItem): OvertimeListItem {
   return {
     id: row.id,
     userId: row.userId,
@@ -43,6 +41,13 @@ function toOvertimeResponseData(row: OvertimeDbRow): OvertimeResponseData {
     end: formatTimeHHMM(row.end),
     description: row.description,
     date: row.date,
+    status: row.status,
+  };
+}
+
+function toOvertimeResponseData(row: OvertimeDbRow): OvertimeResponseData {
+  return {
+    ...toOvertimeListItem(row),
     createdAt: row.createdAt.toISOString(),
   };
 }
@@ -109,6 +114,7 @@ export async function createOvertime(request: CreateOvertimeRequest): Promise<Ov
         end: input.end,
         description: input.description,
         date: input.date,
+        status: true,
         created_at: now,
         updated_at: now,
       })
@@ -165,31 +171,9 @@ export async function updateOvertime(
   });
 }
 
-const overtimeDetailColumns = {
-  id: overtimes.id,
-  userId: overtimes.user_id,
-  timeFrame: overtimes.time_frame,
-  start: overtimes.start,
-  end: overtimes.end,
-  description: overtimes.description,
-  date: overtimes.date,
-};
-
-function toOvertimeDetailData(row: OvertimeDetailData): OvertimeDetailData {
-  return {
-    id: row.id,
-    userId: row.userId,
-    timeFrame: row.timeFrame,
-    start: formatTimeHHMM(row.start),
-    end: formatTimeHHMM(row.end),
-    description: row.description,
-    date: row.date,
-  };
-}
-
 export async function getOvertimes(
   queryInput: ListOvertimesQueryInput = {},
-): Promise<{ data: OvertimeDetailData[]; pagination: OvertimePagination }> {
+): Promise<{ data: OvertimeListItem[]; pagination: OvertimePagination }> {
   const query = validate(listOvertimesQuerySchema, queryInput);
   const conditions = [isNull(overtimes.deleted_at)];
 
@@ -215,7 +199,7 @@ export async function getOvertimes(
   const total = Number(countRow?.total ?? 0);
 
   const rows = await db
-    .select(overtimeDetailColumns)
+    .select(overtimeListColumns)
     .from(overtimes)
     .innerJoin(users, eq(overtimes.user_id, users.id))
     .where(whereClause)
@@ -224,7 +208,7 @@ export async function getOvertimes(
     .offset((query.page - 1) * query.limit);
 
   return {
-    data: rows.map(toOvertimeDetailData),
+    data: rows.map(toOvertimeListItem),
     pagination: {
       page: query.page,
       limit: query.limit,
@@ -232,20 +216,6 @@ export async function getOvertimes(
       total_pages: total === 0 ? 0 : Math.ceil(total / query.limit),
     },
   };
-}
-
-export async function getOvertimeById(rawId: number | string): Promise<OvertimeDetailData> {
-  const param = validate(overtimeIdParamSchema, { id: rawId });
-
-  const [record] = await db
-    .select(overtimeDetailColumns)
-    .from(overtimes)
-    .where(and(eq(overtimes.id, param.id), isNull(overtimes.deleted_at)))
-    .limit(1);
-
-  if (!record) throw new NotFoundError("Overtime not found");
-
-  return toOvertimeDetailData(record);
 }
 
 export async function removeOvertime(rawId: number | string): Promise<void> {

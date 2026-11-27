@@ -1,4 +1,4 @@
-export interface OvertimeResponseData {
+export interface OvertimeListItem {
   id: number;
   userId: string;
   timeFrame: number;
@@ -6,6 +6,10 @@ export interface OvertimeResponseData {
   end: string;
   description: string;
   date: string;
+  status: boolean;
+}
+
+export interface OvertimeResponseData extends OvertimeListItem {
   createdAt: string;
 }
 
@@ -19,22 +23,6 @@ export interface UpdateOvertimeSuccessResponse {
   status: "success";
   message: "Data lembur berhasil diperbarui";
   data: OvertimeResponseData;
-}
-
-export interface OvertimeDetailData {
-  id: number;
-  userId: string;
-  timeFrame: number;
-  start: string;
-  end: string;
-  description: string;
-  date: string;
-}
-
-export interface DetailOvertimeSuccessResponse {
-  status: "success";
-  message: "Data lembur berhasil diambil";
-  data: OvertimeDetailData;
 }
 
 export interface DeleteOvertimeSuccessResponse {
@@ -52,6 +40,6 @@ export interface OvertimePagination {
 export interface ListOvertimesSuccessResponse {
   status: "success";
   message: "Data lembur berhasil diambil";
-  data: OvertimeDetailData[];
+  data: OvertimeListItem[];
   pagination: OvertimePagination;
 }

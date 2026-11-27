@@ -79,6 +79,7 @@ export const overtimes = pgTable("overtimes", {
   end: time("end").notNull(),
   description: text("description").notNull(),
   date: date("date").notNull(),
+  status: boolean("status").notNull().default(false),
   created_at: timestamp("created_at").defaultNow().notNull(),
   updated_at: timestamp("updated_at").defaultNow().notNull(),
   deleted_at: timestamp("deleted_at"),
